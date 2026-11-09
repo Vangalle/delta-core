@@ -37,7 +37,7 @@ async fn real_terminal_preserves_shell_state_and_reports_child_exit() {
         }
         panic!("missing child exit");
     }).await.unwrap();
-    assert!(output.contains(&format!("CWD:{}/nested", dir.path().display())), "{output}");
+    assert!(output.contains(&format!("CWD:{}/nested", dir.path().canonicalize().unwrap().display())), "{output}");
 }
 
 #[test]
