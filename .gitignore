@@ -1,0 +1,9 @@
+/target/
+/node_modules/
+**/node_modules/
+**/dist/
+/.delta-core/
+/.superpowers/
+/test-results/
+/playwright-report/
+.DS_Store

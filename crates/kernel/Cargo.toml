@@ -1,0 +1,8 @@
+[package]
+name = "delta-kernel"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+delta-protocol = { path = "../protocol" }
+thiserror.workspace = true
