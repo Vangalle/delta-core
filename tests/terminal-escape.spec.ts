@@ -23,10 +23,16 @@ test("Escape returns from a live terminal to document writing without closing th
     exact: true,
   });
   await input.focus();
-  await input.pressSequentially("printf 'BEFORE-ESC\\n'", { delay: 2 });
+  await input.pressSequentially(
+    "printf 'BEFORE-ESC\\n'; sleep 2; printf 'AFTER-WAIT\\n'",
+    { delay: 2 },
+  );
   await input.press("Enter");
   await expect(page.getByTestId("terminal-transcript")).toContainText(
-    "BEFORE-ESC",
+    /\r?\nBEFORE-ESC\r?\n/,
+  );
+  await expect(page.getByTestId("terminal-transcript")).not.toContainText(
+    /\r?\nAFTER-WAIT\r?\n/,
   );
   await input.press("Escape");
   await expect(draft).toBeFocused();
@@ -39,6 +45,9 @@ test("Escape returns from a live terminal to document writing without closing th
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.locator(".published-text")).toHaveText(
     "Writing after the terminal",
+  );
+  await expect(page.getByTestId("terminal-transcript")).toContainText(
+    /\r?\nAFTER-WAIT\r?\n/,
   );
   const snapshot = await client.snapshot(workspace.id);
   expect(snapshot.entries.map((entry) => entry.content.type)).toEqual([
