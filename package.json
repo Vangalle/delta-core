@@ -1,0 +1,20 @@
+{
+  "name": "delta-core",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "generate": "node scripts/schema.mjs",
+    "test": "node --experimental-strip-types --test packages/client/tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build -w @delta-core/layer",
+    "test:e2e": "playwright test",
+    "example": "node --experimental-strip-types examples/minimal-client.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "^22.0.0",
+    "json-schema-to-typescript": "15.0.4",
+    "typescript": "~5.9.3"
+  }
+}

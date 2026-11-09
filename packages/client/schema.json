@@ -1,0 +1,875 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Contract",
+  "type": "object",
+  "properties": {
+    "backend": {
+      "$ref": "#/$defs/BackendInfo"
+    },
+    "command": {
+      "$ref": "#/$defs/Command"
+    },
+    "create_workspace": {
+      "$ref": "#/$defs/CreateWorkspace"
+    },
+    "error": {
+      "$ref": "#/$defs/ApiError"
+    },
+    "event": {
+      "$ref": "#/$defs/Event"
+    },
+    "invitation": {
+      "$ref": "#/$defs/Invitation"
+    },
+    "invite_member": {
+      "$ref": "#/$defs/InviteMember"
+    },
+    "member": {
+      "$ref": "#/$defs/Member"
+    },
+    "receipt": {
+      "$ref": "#/$defs/Receipt"
+    },
+    "snapshot": {
+      "$ref": "#/$defs/Snapshot"
+    },
+    "workspace_info": {
+      "$ref": "#/$defs/WorkspaceInfo"
+    }
+  },
+  "required": [
+    "command",
+    "event",
+    "snapshot",
+    "member",
+    "create_workspace",
+    "invitation",
+    "invite_member",
+    "error",
+    "receipt",
+    "workspace_info",
+    "backend"
+  ],
+  "$defs": {
+    "Activity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "message_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "message_start"
+            }
+          },
+          "required": [
+            "type",
+            "message_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "message_id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "text_delta"
+            }
+          },
+          "required": [
+            "type",
+            "message_id",
+            "index",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "message_id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "message_end"
+            }
+          },
+          "required": [
+            "type",
+            "message_id",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "args": true,
+            "call_id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "tool_start"
+            }
+          },
+          "required": [
+            "type",
+            "call_id",
+            "name",
+            "args"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "call_id": {
+              "type": "string"
+            },
+            "result": true,
+            "type": {
+              "type": "string",
+              "const": "tool_update"
+            }
+          },
+          "required": [
+            "type",
+            "call_id",
+            "result"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "call_id": {
+              "type": "string"
+            },
+            "is_error": {
+              "type": "boolean"
+            },
+            "result": true,
+            "type": {
+              "type": "string",
+              "const": "tool_end"
+            }
+          },
+          "required": [
+            "type",
+            "call_id",
+            "result",
+            "is_error"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aborted": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "settled"
+            }
+          },
+          "required": [
+            "type",
+            "aborted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": true,
+            "type": {
+              "type": "string",
+              "const": "backend"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ]
+        }
+      ]
+    },
+    "ApiError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "BackendInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ]
+    },
+    "Change": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "entry": {
+              "$ref": "#/$defs/Entry"
+            },
+            "type": {
+              "type": "string",
+              "const": "inserted"
+            }
+          },
+          "required": [
+            "type",
+            "entry"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "text_published"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "revision",
+            "text",
+            "actor"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "terminal_output"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/SessionStatus"
+            },
+            "type": {
+              "type": "string",
+              "const": "session_state"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "activity": {
+              "$ref": "#/$defs/Activity"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "agent_activity"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "activity"
+          ]
+        }
+      ]
+    },
+    "Command": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "base_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "publish_text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "base_revision",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/ReferenceKind"
+            },
+            "label": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "insert_reference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "kind",
+            "target",
+            "label"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "open_terminal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "terminal_input"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cols": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "id": {
+              "type": "string"
+            },
+            "rows": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "resize_terminal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "cols",
+            "rows"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "close_terminal"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "backend": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "prompt_agent"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "backend",
+            "prompt"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "abort_agent"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id"
+          ]
+        }
+      ]
+    },
+    "Content": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "controller": {
+              "type": "string"
+            },
+            "output": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "$ref": "#/$defs/SessionStatus"
+            },
+            "type": {
+              "type": "string",
+              "const": "terminal"
+            }
+          },
+          "required": [
+            "type",
+            "controller",
+            "status",
+            "output"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "activities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Activity"
+              }
+            },
+            "backend": {
+              "type": "string"
+            },
+            "controller": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/SessionStatus"
+            },
+            "type": {
+              "type": "string",
+              "const": "agent"
+            }
+          },
+          "required": [
+            "type",
+            "backend",
+            "controller",
+            "status",
+            "prompt",
+            "activities"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ReferenceKind"
+            },
+            "label": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "reference"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "target",
+            "label"
+          ]
+        }
+      ]
+    },
+    "CreateWorkspace": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "Entry": {
+      "type": "object",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/Content"
+        },
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "author",
+        "content"
+      ]
+    },
+    "Event": {
+      "type": "object",
+      "properties": {
+        "change": {
+          "$ref": "#/$defs/Change"
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence",
+        "change"
+      ]
+    },
+    "Invitation": {
+      "type": "object",
+      "properties": {
+        "member": {
+          "$ref": "#/$defs/Member"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "member",
+        "token"
+      ]
+    },
+    "InviteMember": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "role"
+      ]
+    },
+    "Member": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "role"
+      ]
+    },
+    "Receipt": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "cursor"
+      ]
+    },
+    "ReferenceKind": {
+      "type": "string",
+      "enum": [
+        "thread",
+        "user"
+      ]
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "owner",
+        "executor",
+        "editor",
+        "viewer"
+      ]
+    },
+    "SessionStatus": {
+      "type": "string",
+      "enum": [
+        "running",
+        "idle",
+        "closed",
+        "interrupted",
+        "failed"
+      ]
+    },
+    "Snapshot": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Entry"
+          }
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceInfo"
+        }
+      },
+      "required": [
+        "workspace",
+        "cursor",
+        "entries"
+      ]
+    },
+    "WorkspaceInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ]
+    }
+  }
+}
