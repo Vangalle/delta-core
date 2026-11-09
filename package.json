@@ -2,8 +2,12 @@
   "name": "delta-core",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
+    "start": "npm run build && cargo run -p delta-host",
     "generate": "node scripts/schema.mjs",
     "test": "node --experimental-strip-types --test packages/client/tests/*.test.ts",
     "typecheck": "tsc --noEmit",
@@ -15,6 +19,7 @@
     "@playwright/test": "1.65.0",
     "@types/node": "^22.0.0",
     "json-schema-to-typescript": "15.0.4",
+    "prettier": "^3.9.10",
     "typescript": "~5.9.3"
   }
 }

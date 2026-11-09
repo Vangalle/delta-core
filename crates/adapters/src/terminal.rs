@@ -1,9 +1,15 @@
 use crate::AdapterResult;
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
-use std::{io::{Read, Write}, path::Path};
+use std::{
+    io::{Read, Write},
+    path::Path,
+};
 use tokio::sync::mpsc;
 
-pub enum TerminalEvent { Output(Vec<u8>), Exited }
+pub enum TerminalEvent {
+    Output(Vec<u8>),
+    Exited,
+}
 
 pub struct Terminal {
     master: Box<dyn MasterPty + Send>,
@@ -13,7 +19,12 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn spawn(cwd: &Path, shell: &str) -> AdapterResult<(Self, mpsc::Receiver<TerminalEvent>)> {
-        let pair = native_pty_system().openpty(PtySize { rows: 12, cols: 100, pixel_width: 0, pixel_height: 0 })?;
+        let pair = native_pty_system().openpty(PtySize {
+            rows: 12,
+            cols: 100,
+            pixel_width: 0,
+            pixel_height: 0,
+        })?;
         let mut command = CommandBuilder::new(shell);
         command.arg("-i");
         command.cwd(cwd);
@@ -30,13 +41,27 @@ impl Terminal {
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) | Err(_) => break,
-                    Ok(n) => if tx.blocking_send(TerminalEvent::Output(buf[..n].to_vec())).is_err() { break; },
+                    Ok(n) => {
+                        if tx
+                            .blocking_send(TerminalEvent::Output(buf[..n].to_vec()))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
                 }
             }
             let _ = child.wait();
             let _ = tx.blocking_send(TerminalEvent::Exited);
         });
-        Ok((Self { master: pair.master, writer, killer }, rx))
+        Ok((
+            Self {
+                master: pair.master,
+                writer,
+                killer,
+            },
+            rx,
+        ))
     }
 
     pub fn input(&mut self, data: &str) -> AdapterResult<()> {
@@ -46,13 +71,23 @@ impl Terminal {
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> AdapterResult<()> {
-        self.master.resize(PtySize { cols, rows, pixel_width: 0, pixel_height: 0 })?;
+        self.master.resize(PtySize {
+            cols,
+            rows,
+            pixel_width: 0,
+            pixel_height: 0,
+        })?;
         Ok(())
     }
 
-    pub fn close(&mut self) -> AdapterResult<()> { self.killer.kill()?; Ok(()) }
+    pub fn close(&mut self) -> AdapterResult<()> {
+        self.killer.kill()?;
+        Ok(())
+    }
 }
 
 impl Drop for Terminal {
-    fn drop(&mut self) { let _ = self.killer.kill(); }
+    fn drop(&mut self) {
+        let _ = self.killer.kill();
+    }
 }

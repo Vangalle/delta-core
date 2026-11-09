@@ -4,7 +4,11 @@ use std::path::Path;
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
-pub enum AgentCommand { Prompt(String), Abort, Shutdown }
+pub enum AgentCommand {
+    Prompt(String),
+    Abort,
+    Shutdown,
+}
 
 pub struct AgentConnection {
     pub commands: mpsc::Sender<AgentCommand>,

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Delta Core</title>
+  </head>
+  <body>
+    <section id="login" class="login-screen">
+      <form id="login-form" class="login-form">
+        <div class="wordmark"><span class="mark">Δ</span> Delta Core</div>
+        <h1>Your shared working surface.</h1>
+        <p>
+          A continuous document for writing, thinking and executing together.
+        </p>
+        <label for="token">Member token</label>
+        <input
+          id="token"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Paste your host or invitation token"
+          required
+        />
+        <button class="primary" type="submit">Enter workspace</button>
+        <p id="login-error" class="error" aria-live="polite"></p>
+        <small
+          >Experimental browser layer · credentials stay in this tab.<br />The
+          host token is printed on first start and stored in
+          <code>.delta-core/owner-token</code>.</small
+        >
+      </form>
+    </section>
+    <div id="app" class="layout" hidden>
+      <aside class="sidebar">
+        <div class="wordmark">
+          <span class="mark">Δ</span> Delta Core <span class="lab">lab</span>
+        </div>
+        <div class="nav-heading">
+          <span>WORKSPACES</span
+          ><button
+            id="new-workspace"
+            class="icon-button"
+            aria-label="New workspace"
+          >
+            +
+          </button>
+        </div>
+        <nav id="workspace-list" aria-label="Workspaces"></nav>
+        <div class="sidebar-bottom">
+          <span class="host-dot"></span> Single execution host
+          <button id="invite" class="subtle" hidden>Invite</button>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <span id="workspace-breadcrumb"></span>
+          <div class="topbar-right">
+            <span id="connection" data-testid="connection">Connecting</span
+            ><span id="member-name"></span
+            ><button id="sign-out" class="subtle">Leave</button>
+          </div>
+        </header>
+        <div id="notice" role="status" class="notice" hidden></div>
+        <article class="document">
+          <div class="document-heading">
+            <div class="eyebrow">SHARED WORKSPACE</div>
+            <h1 id="workspace-title"></h1>
+            <p>Publish when ready. Execution is shared as it happens.</p>
+          </div>
+          <div id="flow" class="flow"></div>
+          <section id="compose" class="compose">
+            <textarea
+              id="draft"
+              aria-label="Private draft"
+              placeholder="Write here. Type @ to insert…"
+              rows="3"
+              spellcheck="false"
+            ></textarea>
+            <div
+              id="palette"
+              class="palette"
+              role="group"
+              aria-label="Insert into workspace"
+              hidden
+            ></div>
+            <div class="composer-footer">
+              <span id="draft-state">Private draft · only you</span>
+              <div class="composer-actions">
+                <button
+                  id="quote"
+                  class="subtle"
+                  title="Reference selected text in your draft"
+                >
+                  Quote selection</button
+                ><button id="ask-pi" class="subtle">Ask Pi</button
+                ><button id="publish" class="primary">
+                  Publish <kbd>⌘ ↵</kbd>
+                </button>
+              </div>
+            </div>
+            <p class="insert-hint">
+              <code>@terminal</code> execute here <span>·</span>
+              <code>@threads</code> reference a workspace <span>·</span>
+              <code>@users</code> mention someone
+            </p>
+          </section>
+          <footer class="document-footer">
+            Your writing is private until published. Running a command can
+            change the host immediately.
+          </footer>
+        </article>
+      </main>
+    </div>
+    <dialog id="invite-dialog">
+      <form id="invite-form">
+        <h2>Invite a collaborator</h2>
+        <p>Members can access all workspaces on this host.</p>
+        <label>Name<input id="invite-name" required maxlength="100" /></label
+        ><label
+          >Access<select id="invite-role">
+            <option value="editor">Editor · publish text</option>
+            <option value="viewer">Observer · read only</option>
+            <option value="executor">Executor · can run host code</option>
+          </select></label
+        >
+        <p class="warning">
+          Execution access is not sandboxed. Only grant it to people you trust.
+        </p>
+        <div class="dialog-actions">
+          <button id="close-invite" type="button" class="subtle">Close</button
+          ><button type="submit" class="primary">Create invitation</button>
+        </div>
+        <label id="invitation-result" hidden
+          >Share this token privately<textarea
+            id="invitation-token"
+            readonly
+            rows="3"
+          ></textarea>
+        </label>
+      </form>
+    </dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
