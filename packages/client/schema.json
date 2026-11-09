@@ -56,6 +56,26 @@
         {
           "type": "object",
           "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "prompt"
+            }
+          },
+          "required": [
+            "type",
+            "text",
+            "actor"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "message_id": {
               "type": "string"
             },

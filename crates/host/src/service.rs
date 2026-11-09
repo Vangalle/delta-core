@@ -377,6 +377,7 @@ impl Service {
                         let workspace = id.to_owned();
                         tokio::spawn(async move {
                             while let Some(event) = receiver.recv().await {
+                                let ended = !matches!(&event, TerminalEvent::Output(_));
                                 let change = match event {
                                     TerminalEvent::Output(bytes) => Change::TerminalOutput {
                                         id: entry.clone(),
@@ -384,10 +385,24 @@ impl Service {
                                     },
                                     TerminalEvent::Exited => Change::SessionState {
                                         id: entry.clone(),
-                                        status: SessionStatus::Closed,
+                                        status: if *service.stopping.borrow() {
+                                            SessionStatus::Interrupted
+                                        } else {
+                                            SessionStatus::Closed
+                                        },
                                     },
+                                    TerminalEvent::InputFailed(error) => {
+                                        eprintln!("terminal input failed: {error}");
+                                        Change::SessionState {
+                                            id: entry.clone(),
+                                            status: SessionStatus::Failed,
+                                        }
+                                    }
                                 };
                                 service.record(&workspace, change).await;
+                                if ended {
+                                    break;
+                                }
                             }
                             service
                                 .state
@@ -470,12 +485,36 @@ impl Service {
                                         )
                                         .await;
                                 }
-                                service
-                                    .state
-                                    .lock()
-                                    .await
-                                    .agents
-                                    .remove(&(workspace, agent));
+                                let mut state = service.state.lock().await;
+                                state.agents.remove(&(workspace.clone(), agent.clone()));
+                                let status = state
+                                    .workspaces
+                                    .get(&workspace)
+                                    .and_then(|w| w.entry(&agent).ok())
+                                    .and_then(|entry| match &entry.content {
+                                        Content::Agent { status, .. } => Some(*status),
+                                        _ => None,
+                                    });
+                                let change = match status {
+                                    Some(SessionStatus::Running) => Some(Change::AgentActivity {
+                                        id: agent,
+                                        activity: Activity::Failed {
+                                            message: "Agent backend disconnected before completion"
+                                                .into(),
+                                        },
+                                    }),
+                                    Some(SessionStatus::Idle) => Some(Change::SessionState {
+                                        id: agent,
+                                        status: SessionStatus::Closed,
+                                    }),
+                                    _ => None,
+                                };
+                                let persisted = change
+                                    .map(|change| service.commit(&mut state, &workspace, &[change]))
+                                    .transpose();
+                                if let Err(error) = persisted {
+                                    eprintln!("backend disconnect persistence failed: {error:?}");
+                                }
                             });
                         }
                     }

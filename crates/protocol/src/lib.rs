@@ -49,6 +49,10 @@ pub enum ReferenceKind {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Activity {
+    Prompt {
+        text: String,
+        actor: String,
+    },
     MessageStart {
         message_id: String,
     },

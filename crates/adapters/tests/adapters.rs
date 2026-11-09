@@ -57,6 +57,7 @@ async fn real_terminal_preserves_shell_state_and_reports_child_exit() {
             match event {
                 TerminalEvent::Output(data) => output.extend(data),
                 TerminalEvent::Exited => return String::from_utf8_lossy(&output).to_string(),
+                TerminalEvent::InputFailed(error) => panic!("terminal input failed: {error}"),
             }
         }
         panic!("missing child exit");

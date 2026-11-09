@@ -3,17 +3,24 @@ use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_s
 use std::{
     io::{Read, Write},
     path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc as sync_mpsc,
+    },
 };
 use tokio::sync::mpsc;
 
 pub enum TerminalEvent {
     Output(Vec<u8>),
     Exited,
+    InputFailed(String),
 }
 
 pub struct Terminal {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    input: sync_mpsc::SyncSender<Vec<u8>>,
+    closed: Arc<AtomicBool>,
     killer: Box<dyn ChildKiller + Send + Sync>,
 }
 
@@ -34,8 +41,26 @@ impl Terminal {
         let killer = child.clone_killer();
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader()?;
-        let writer = pair.master.take_writer()?;
+        let mut writer = pair.master.take_writer()?;
         let (tx, rx) = mpsc::channel(64);
+        let (input, queued) = sync_mpsc::sync_channel::<Vec<u8>>(16);
+        let closed = Arc::new(AtomicBool::new(false));
+        let writer_closed = closed.clone();
+        let writer_events = tx.clone();
+        std::thread::spawn(move || {
+            while let Ok(bytes) = queued.recv() {
+                if writer_closed.load(Ordering::Acquire) {
+                    break;
+                }
+                if let Err(error) = writer.write_all(&bytes).and_then(|_| writer.flush()) {
+                    if !writer_closed.load(Ordering::Acquire) {
+                        let _ = writer_events
+                            .blocking_send(TerminalEvent::InputFailed(error.to_string()));
+                    }
+                    break;
+                }
+            }
+        });
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
             loop {
@@ -57,7 +82,8 @@ impl Terminal {
         Ok((
             Self {
                 master: pair.master,
-                writer,
+                input,
+                closed,
                 killer,
             },
             rx,
@@ -65,9 +91,12 @@ impl Terminal {
     }
 
     pub fn input(&mut self, data: &str) -> AdapterResult<()> {
-        self.writer.write_all(data.as_bytes())?;
-        self.writer.flush()?;
-        Ok(())
+        if data.len() > 16_384 || self.closed.load(Ordering::Acquire) {
+            return Err("terminal input is too large or closed".into());
+        }
+        self.input
+            .try_send(data.as_bytes().to_vec())
+            .map_err(|_| "terminal input queue is full or closed".into())
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> AdapterResult<()> {
@@ -81,6 +110,7 @@ impl Terminal {
     }
 
     pub fn close(&mut self) -> AdapterResult<()> {
+        self.closed.store(true, Ordering::Release);
         self.killer.kill()?;
         Ok(())
     }
@@ -88,6 +118,7 @@ impl Terminal {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
+        self.closed.store(true, Ordering::Release);
         let _ = self.killer.kill();
     }
 }

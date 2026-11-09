@@ -257,10 +257,19 @@ impl Workspace {
                         _ => return Err(KernelError::Unavailable),
                     }
                     Decision {
-                        changes: vec![Change::SessionState {
-                            id: id.clone(),
-                            status: SessionStatus::Running,
-                        }],
+                        changes: vec![
+                            Change::AgentActivity {
+                                id: id.clone(),
+                                activity: Activity::Prompt {
+                                    text: prompt.clone(),
+                                    actor: actor.id.clone(),
+                                },
+                            },
+                            Change::SessionState {
+                                id: id.clone(),
+                                status: SessionStatus::Running,
+                            },
+                        ],
                         effect: None,
                     }
                 } else {

@@ -89,6 +89,7 @@ export class TextView {
       } catch (error) {
         report(error);
         if (error instanceof ApiError && error.status === 409) {
+          const displayedRevision = this.entry.revision;
           const shared = node(
             "pre",
             "shared-version",
@@ -103,7 +104,7 @@ export class TextView {
             shared,
             button("Publish my version over this revision", () => {
               if (this.draft) {
-                this.draft.base = this.entry.revision;
+                this.draft.base = displayedRevision;
                 persist();
                 void publish();
               }

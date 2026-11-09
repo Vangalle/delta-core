@@ -102,6 +102,11 @@ export type Content =
 export type SessionStatus = "running" | "idle" | "closed" | "interrupted" | "failed";
 export type Activity =
   | {
+      actor: string;
+      text: string;
+      type: "prompt";
+    }
+  | {
       message_id: string;
       type: "message_start";
     }

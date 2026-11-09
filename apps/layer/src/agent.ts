@@ -39,7 +39,9 @@ export class AgentView {
   update(content: AgentContent): void {
     this.state.textContent = content.status;
     for (const activity of content.activities.slice(this.count)) {
-      if (activity.type === "message_start") {
+      if (activity.type === "prompt") {
+        this.element.append(node("p", "agent-request", activity.text));
+      } else if (activity.type === "message_start") {
         const element = node("div", "agent-message");
         this.messages.set(activity.message_id, { element, blocks: new Map() });
         this.element.append(element);
