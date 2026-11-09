@@ -31,28 +31,30 @@ test("private drafts stay private, explicit publications sync, and conflicts kee
     await first.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(second.locator("#flow")).toContainText("Unpublished thought");
     await first.getByRole("button", { name: "Edit text", exact: true }).click();
-    await first.getByLabel("Edit draft").fill("My private revision");
+    await first
+      .getByRole("textbox", { name: "Edit draft", exact: true })
+      .fill("My private revision");
     await second
       .getByRole("button", { name: "Edit text", exact: true })
       .click();
-    await second.getByLabel("Edit draft").fill("Other published revision");
+    await second
+      .getByRole("textbox", { name: "Edit draft", exact: true })
+      .fill("Other published revision");
     await second
       .getByRole("button", { name: "Publish edit", exact: true })
       .click();
-    await expect(first.getByLabel("Edit draft")).toHaveValue(
-      "My private revision",
-    );
+    const editDraft = first.getByRole("textbox", {
+      name: "Edit draft",
+      exact: true,
+    });
+    await expect(editDraft).toHaveText("My private revision");
     await first
       .getByRole("button", { name: "Publish edit", exact: true })
       .click();
     await expect(first.getByRole("status")).toContainText("changed");
-    await expect(first.getByLabel("Edit draft")).toHaveValue(
-      "My private revision",
-    );
+    await expect(editDraft).toHaveText("My private revision");
     await first.reload();
-    await expect(first.getByLabel("Edit draft")).toHaveValue(
-      "My private revision",
-    );
+    await expect(editDraft).toHaveText("My private revision");
   } finally {
     await a.close();
     await b.close();
@@ -125,6 +127,10 @@ test("Pi RPC fixture results fold and unfold, and final results replace partial 
   await expect(page.locator(".agent-message")).toHaveText(
     "Fixture response, not model inference.",
   );
+  await expect(page.locator(".model-identity")).toHaveText(
+    "fixture/fixture-model",
+  );
+  await expect(page.locator("details.backend-event")).toHaveCount(1);
   const tool = page.locator("details.tool-result");
   await expect(tool).not.toHaveAttribute("open", "");
   await tool.locator("summary").click();

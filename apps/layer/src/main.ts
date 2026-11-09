@@ -11,11 +11,16 @@ import {
 import { TerminalView } from "./terminal.ts";
 import { AgentView } from "./agent.ts";
 import { TextView } from "./text.ts";
-import { node, button, get, grow } from "./ui.ts";
+import { node, button, get } from "./ui.ts";
+import { RichEditor } from "./editor.ts";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 
-const draft = get<HTMLTextAreaElement>("draft");
+const draft = new RichEditor(
+  get("draft"),
+  "Private draft",
+  "Write here. Type @ to insert…",
+);
 const compose = get("compose");
 const palette = get("palette");
 const flow = get("flow");
@@ -50,6 +55,7 @@ function draftKey(): string {
   return `delta:draft:${me.id}:${snapshot.workspace.id}:new`;
 }
 function saveDraft(): void {
+  if (!snapshot || !me) return;
   try {
     localStorage.setItem(
       draftKey(),
@@ -73,7 +79,21 @@ function selectPosition(id: string): void {
   after = id;
   placeComposer();
   saveDraft();
+  if (me.role === "viewer") {
+    get("workspace-title").focus();
+    return;
+  }
   draft.focus();
+}
+
+function editAgentResult(id: string, markdown: string): void {
+  if (
+    me.role === "viewer" ||
+    !snapshot.entries.some((entry) => entry.id === id)
+  )
+    return;
+  draft.value = draft.value.trim() ? `${draft.value}\n\n${markdown}` : markdown;
+  selectPosition(id);
 }
 
 function renderEntries(): void {
@@ -99,6 +119,7 @@ function renderEntries(): void {
           client,
           snapshot.workspace.id,
           report,
+          () => selectPosition(entry.id),
         );
         view = {
           element: terminal.element,
@@ -115,6 +136,7 @@ function renderEntries(): void {
           client,
           snapshot.workspace.id,
           report,
+          (markdown) => editAgentResult(entry.id, markdown),
         );
         view = {
           element: agent.element,
@@ -171,13 +193,12 @@ async function openWorkspace(id: string): Promise<void> {
   const restored = saved
     ? (JSON.parse(saved) as { text: string; after: string | null })
     : null;
-  draft.value = restored?.text ?? "";
+  draft.reset(restored?.text ?? "");
   after = restored?.after ?? null;
   if (after && !snapshot.entries.some((e) => e.id === after)) after = null;
   history.replaceState(null, "", `/?workspace=${encodeURIComponent(id)}`);
   renderNavigation();
   renderEntries();
-  grow(draft);
   updatePalette();
   const current = new AbortController();
   subscription = current;
@@ -272,7 +293,6 @@ function completeDraft(
   after = id;
   if (draft.value === original) draft.value = remaining;
   saveDraft();
-  grow(draft);
   updatePalette();
   placeComposer();
 }
@@ -280,21 +300,16 @@ async function insert(command: Command): Promise<void> {
   const generation = navigation;
   const key = draftKey();
   const text = draft.value;
+  const remaining = draft.trigger()?.remaining ?? text;
   await client.command(snapshot.workspace.id, command);
   if ("id" in command)
-    completeDraft(
-      generation,
-      key,
-      text,
-      command.id,
-      text.replace(/(^|\s)@(?:terminal|threads|users)?$/, "$1"),
-    );
+    completeDraft(generation, key, text, command.id, remaining);
 }
 function updatePalette(): void {
   choices = [];
-  const match = /(?:^|\s)@(\w*)$/.exec(draft.value);
-  if (match) {
-    const keyword = match[1];
+  const trigger = draft.trigger();
+  if (trigger) {
+    const keyword = trigger.keyword;
     if (
       "terminal".startsWith(keyword) &&
       (me.role === "owner" || me.role === "executor")
@@ -331,7 +346,7 @@ function updatePalette(): void {
       choices.push({
         label: "Threads · reference a workspace",
         action: () => {
-          draft.value = draft.value.replace(/@\w*$/, "@threads");
+          draft.setTrigger("@threads");
           updatePalette();
         },
       });
@@ -357,7 +372,7 @@ function updatePalette(): void {
       choices.push({
         label: "Users · mention someone",
         action: () => {
-          draft.value = draft.value.replace(/@\w*$/, "@users");
+          draft.setTrigger("@users");
           updatePalette();
         },
       });
@@ -402,23 +417,26 @@ ask.addEventListener("click", () => {
     completeDraft(generation, key, text, id, "");
   });
 });
-draft.addEventListener("input", () => {
+draft.onChange = () => {
   saveDraft();
-  grow(draft);
   updatePalette();
-});
-draft.addEventListener("keydown", (event) => {
+};
+draft.onSelectionChange = () => updatePalette();
+draft.onKeyDown = (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
     event.preventDefault();
     publish.click();
+    return true;
   } else if (event.key === "Enter" && !event.shiftKey && choices.length) {
     event.preventDefault();
     choices[0].action();
+    return true;
   } else if (event.key === "Escape") {
     choices = [];
     palette.hidden = true;
   }
-});
+  return false;
+};
 document.addEventListener("selectionchange", () => {
   const selection = window.getSelection();
   if (
@@ -437,7 +455,6 @@ get("quote").addEventListener("click", () => {
     .map((line) => `> ${line}`)
     .join("\n")}\n`;
   saveDraft();
-  grow(draft);
   draft.focus();
 });
 get("new-workspace").addEventListener("click", () => {

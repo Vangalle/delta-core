@@ -36,7 +36,7 @@ test("a pending publication cannot clear a different workspace draft after navig
   await expect(
     page.getByRole("button", { name: "Publish", exact: true }),
   ).toBeEnabled();
-  await expect(page.getByLabel("Private draft", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("Private draft", { exact: true })).toHaveText(
     "Same text, different private draft",
   );
 });

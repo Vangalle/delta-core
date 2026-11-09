@@ -13,7 +13,14 @@ await writeFile(
 import sys,json
 for line in sys.stdin:
  c=json.loads(line)
- if c['type']=='prompt':
+ if c['type']=='get_state':
+  print(json.dumps({'type':'response','id':c.get('id'),'command':'get_state','success':True,'data':{'model':{'id':'fixture-model','provider':'fixture'}}}),flush=True)
+  print(json.dumps({'type':'extension_ui_request','id':'status','method':'setStatus','statusKey':'fixture','statusText':'Ready'}),flush=True)
+  print(json.dumps({'type':'extension_ui_request','id':'widget','method':'setWidget','widgetKey':'fixture','widgetLines':['Protocol fixture']}),flush=True)
+ elif c['type']=='prompt':
+  if 'Interaction fixture' in c['message']:
+   print(json.dumps({'type':'extension_ui_request','id':'fixture-confirm','method':'confirm','title':'Fixture confirmation','message':'A controller decision is required'}),flush=True)
+   continue
   records=[
    {'type':'response','command':'prompt','success':True,'data':{'disposition':'started'}},
    {'type':'tool_execution_start','toolCallId':'fixture-call','toolName':'read','args':{'path':'fixture.txt'}},
@@ -26,6 +33,7 @@ for line in sys.stdin:
    {'type':'agent_settled','aborted':False}
   ]
   for r in records: print(json.dumps(r),flush=True)
+ elif c['type']=='extension_ui_response': print(json.dumps({'type':'agent_settled','aborted':False}),flush=True)
  elif c['type']=='abort': print(json.dumps({'type':'agent_settled','aborted':True}),flush=True)
 `,
 );

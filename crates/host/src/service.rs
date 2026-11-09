@@ -353,6 +353,15 @@ impl Service {
             .get(id)
             .ok_or(ServiceError::NotFound)?
             .decide(actor, command)?;
+        if let Some(Effect::RespondAgent { id: entry, .. }) = &decision.effect {
+            let sender = s
+                .agents
+                .get(&(id.to_owned(), entry.clone()))
+                .ok_or(ServiceError::Unavailable)?;
+            if sender.is_closed() || sender.capacity() == 0 {
+                return Err(ServiceError::Unavailable);
+            }
+        }
         self.commit(&mut s, id, &decision.changes)?;
         let key = |entry: &str| (id.to_owned(), entry.to_owned());
         let result: Result<(), ServiceError> = match decision.effect {
@@ -436,6 +445,19 @@ impl Service {
                 .get_mut(&key(&entry))
                 .ok_or(ServiceError::Unavailable)?
                 .close()
+                .map_err(|_| ServiceError::Unavailable),
+            Some(Effect::RespondAgent {
+                id: entry,
+                request_id,
+                response,
+            }) => s
+                .agents
+                .get(&key(&entry))
+                .ok_or(ServiceError::Unavailable)?
+                .try_send(AgentCommand::Respond {
+                    request_id,
+                    response,
+                })
                 .map_err(|_| ServiceError::Unavailable),
             Some(Effect::AbortAgent { id: entry }) => s
                 .agents

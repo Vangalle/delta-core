@@ -7,6 +7,10 @@ use tokio::sync::mpsc;
 pub enum AgentCommand {
     Prompt(String),
     Abort,
+    Respond {
+        request_id: String,
+        response: delta_protocol::InteractionResponse,
+    },
     Shutdown,
 }
 

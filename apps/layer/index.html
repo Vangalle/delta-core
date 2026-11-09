@@ -65,18 +65,12 @@
         <article class="document">
           <div class="document-heading">
             <div class="eyebrow">SHARED WORKSPACE</div>
-            <h1 id="workspace-title"></h1>
+            <h1 id="workspace-title" tabindex="-1"></h1>
             <p>Publish when ready. Execution is shared as it happens.</p>
           </div>
           <div id="flow" class="flow"></div>
           <section id="compose" class="compose">
-            <textarea
-              id="draft"
-              aria-label="Private draft"
-              placeholder="Write here. Type @ to insert…"
-              rows="3"
-              spellcheck="false"
-            ></textarea>
+            <div id="draft"></div>
             <div
               id="palette"
               class="palette"

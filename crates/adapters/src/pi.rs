@@ -2,7 +2,7 @@ use crate::{
     AdapterResult,
     agent::{AgentBackend, AgentCommand, AgentConnection},
 };
-use delta_protocol::Activity;
+use delta_protocol::{Activity, InteractionKind, InteractionResponse};
 use serde_json::{Value, json};
 use std::{
     path::{Path, PathBuf},
@@ -76,9 +76,47 @@ impl PiMapper {
                 result: event["result"].clone(),
                 is_error: event["isError"].as_bool().unwrap_or(false),
             }),
+            "extension_ui_request" if event["method"] == "setTitle" => None,
+            "extension_ui_request"
+                if matches!(
+                    event["method"].as_str(),
+                    Some("confirm" | "select" | "input" | "editor")
+                ) =>
+            {
+                Some(Activity::InteractionRequested {
+                    request_id: text(&event, "id"),
+                    kind: match event["method"].as_str() {
+                        Some("confirm") => InteractionKind::Confirm,
+                        Some("select") => InteractionKind::Select,
+                        Some("editor") => InteractionKind::Editor,
+                        _ => InteractionKind::Input,
+                    },
+                    title: text(&event, "title"),
+                    message: event["message"]
+                        .as_str()
+                        .or(event["placeholder"].as_str())
+                        .unwrap_or_default()
+                        .to_owned(),
+                    options: event["options"]
+                        .as_array()
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(|v| v.as_str().map(str::to_owned))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    initial_value: event["prefill"].as_str().map(str::to_owned),
+                })
+            }
             "agent_settled" => Some(Activity::Settled {
                 aborted: event["aborted"].as_bool().unwrap_or(false),
             }),
+            "response" if event["command"] == "get_state" && event["success"] == true => {
+                Some(Activity::Backend {
+                    data: json!({"type":"model_selected", "provider": event["data"]["model"]["provider"], "model": event["data"]["model"]["id"]}),
+                })
+            }
             "response" if event["success"] == false => Some(Activity::Failed {
                 message: text(&event, "error"),
             }),
@@ -153,6 +191,17 @@ impl AgentBackend for PiBackend {
         });
         let writer_events = tx.clone();
         let mut writer_task = tokio::spawn(async move {
+            if let Err(error) = stdin
+                .write_all(b"{\"id\":\"delta-model\",\"type\":\"get_state\"}\n")
+                .await
+            {
+                let _ = writer_events
+                    .send(Activity::Failed {
+                        message: format!("Pi startup handshake failed: {error}"),
+                    })
+                    .await;
+                return;
+            }
             let mut request = 0u64;
             while let Some(command) = input.recv().await {
                 let value = match command {
@@ -161,6 +210,20 @@ impl AgentBackend for PiBackend {
                         json!({"id":format!("p-{request}"), "type":"prompt", "message":message})
                     }
                     AgentCommand::Abort => json!({"type":"abort"}),
+                    AgentCommand::Respond {
+                        request_id,
+                        response,
+                    } => match response {
+                        InteractionResponse::Confirm { confirmed } => {
+                            json!({"type":"extension_ui_response", "id":request_id, "confirmed":confirmed})
+                        }
+                        InteractionResponse::Value { value } => {
+                            json!({"type":"extension_ui_response", "id":request_id, "value":value})
+                        }
+                        InteractionResponse::Cancel => {
+                            json!({"type":"extension_ui_response", "id":request_id, "cancelled":true})
+                        }
+                    },
                     AgentCommand::Shutdown => break,
                 };
                 let mut bytes = serde_json::to_vec(&value).unwrap_or_default();

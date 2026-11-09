@@ -4,13 +4,16 @@ import {
   type Entry,
   type Member,
 } from "@delta-core/client";
-import { node, button, grow } from "./ui.ts";
+import { node, button } from "./ui.ts";
+import { RichEditor } from "./editor.ts";
+import { MarkdownView } from "./content.ts";
 
 type Draft = { text: string; base: number };
 export class TextView {
   element = node("section", "text-entry");
   private display = node("div", "published-text");
-  private editor = node("textarea", "edit-draft");
+  private editor = new RichEditor(node("div", "edit-draft"), "Edit draft");
+  private displayRenderer = new MarkdownView(this.display);
   private controls = node("div", "edit-controls");
   private review = node("div", "revision-review");
   private entry: Entry;
@@ -27,8 +30,6 @@ export class TextView {
     const key = `delta:draft:${me.id}:${workspace}:${entry.id}`;
     const saved = localStorage.getItem(key);
     this.draft = saved ? (JSON.parse(saved) as Draft) : null;
-    this.editor.setAttribute("aria-label", "Edit draft");
-    this.editor.spellcheck = false;
     const persist = () => {
       try {
         if (this.draft) localStorage.setItem(key, JSON.stringify(this.draft));
@@ -43,11 +44,10 @@ export class TextView {
     };
     const show = () => {
       this.display.hidden = !!this.draft;
-      this.editor.hidden = !this.draft;
+      this.editor.element.hidden = !this.draft;
       this.controls.hidden = !this.draft;
       if (this.draft) {
         this.editor.value = this.draft.text;
-        requestAnimationFrame(() => grow(this.editor));
       }
     };
     const edit = button(
@@ -79,7 +79,7 @@ export class TextView {
         if (this.draft?.text === submitted.text) {
           this.draft = null;
           persist();
-          this.display.textContent = submitted.text;
+          this.displayRenderer.setContent(submitted.text);
           this.review.hidden = true;
           show();
         } else if (this.draft) {
@@ -129,19 +129,20 @@ export class TextView {
       },
       "primary",
     );
-    this.editor.addEventListener("input", () => {
+    this.editor.onChange = () => {
       if (this.draft) {
         this.draft.text = this.editor.value;
         persist();
-        grow(this.editor);
       }
-    });
-    this.editor.addEventListener("keydown", (event) => {
+    };
+    this.editor.onKeyDown = (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
         void publish();
+        return true;
       }
-    });
+      return false;
+    };
     this.controls.append(
       node("span", "private-label", "Private edit · only you"),
       button("Cancel edit", () => {
@@ -156,7 +157,7 @@ export class TextView {
     if (me.role !== "viewer")
       this.element.append(
         edit,
-        this.editor,
+        this.editor.element,
         this.controls,
         this.review,
         button("Continue here", insertAfter, "continue-here subtle"),
@@ -167,7 +168,10 @@ export class TextView {
   update(entry: Entry): void {
     this.entry = entry;
     if (entry.content.type === "text")
-      this.display.textContent = entry.content.text;
+      this.displayRenderer.setContent(entry.content.text);
   }
-  dispose(): void {}
+  dispose(): void {
+    this.editor.dispose();
+    this.displayRenderer.dispose();
+  }
 }

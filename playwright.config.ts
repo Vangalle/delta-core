@@ -8,6 +8,7 @@ const executablePath =
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/live/**",
   workers: 1,
   timeout: 30000,
   use: {

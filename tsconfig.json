@@ -10,5 +10,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts", "examples/**/*.ts", "tests/**/*.ts", "playwright.config.ts"]
+  "include": ["packages/**/*.ts", "apps/**/*.ts", "examples/**/*.ts", "tests/**/*.ts", "playwright*.config.ts"]
 }

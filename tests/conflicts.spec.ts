@@ -20,7 +20,9 @@ test("conflict approval applies only to the exact shared revision displayed for 
     .click();
   await expect(page.getByTestId("connection")).toHaveText("Live");
   await page.getByRole("button", { name: "Edit text", exact: true }).click();
-  await page.getByLabel("Edit draft").fill("my private version");
+  await page
+    .getByRole("textbox", { name: "Edit draft", exact: true })
+    .fill("my private version");
   await client.command(workspace.id, {
     type: "publish_text",
     id: "shared",
@@ -54,7 +56,9 @@ test("conflict approval applies only to the exact shared revision displayed for 
   await expect(page.locator(".shared-version")).toHaveText(
     "unseen revision three",
   );
-  await expect(page.getByLabel("Edit draft")).toHaveValue("my private version");
+  await expect(
+    page.getByRole("textbox", { name: "Edit draft", exact: true }),
+  ).toHaveText("my private version");
   const snapshot = await client.snapshot(workspace.id);
   expect(snapshot.entries[0].content).toEqual({
     type: "text",

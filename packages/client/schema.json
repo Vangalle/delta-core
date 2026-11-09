@@ -56,6 +56,63 @@
         {
           "type": "object",
           "properties": {
+            "initial_value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "$ref": "#/$defs/InteractionKind"
+            },
+            "message": {
+              "type": "string"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "interaction_requested"
+            }
+          },
+          "required": [
+            "type",
+            "request_id",
+            "kind",
+            "title",
+            "message",
+            "options"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "interaction_resolved"
+            }
+          },
+          "required": [
+            "type",
+            "request_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "actor": {
               "type": "string"
             },
@@ -600,6 +657,31 @@
             "type",
             "id"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "response": {
+              "$ref": "#/$defs/InteractionResponse"
+            },
+            "type": {
+              "type": "string",
+              "const": "respond_agent"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "request_id",
+            "response"
+          ]
         }
       ]
     },
@@ -761,6 +843,66 @@
       "required": [
         "sequence",
         "change"
+      ]
+    },
+    "InteractionKind": {
+      "type": "string",
+      "enum": [
+        "confirm",
+        "select",
+        "input",
+        "editor"
+      ]
+    },
+    "InteractionResponse": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "confirmed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "confirm"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "confirmed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "value"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cancel"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
       ]
     },
     "Invitation": {

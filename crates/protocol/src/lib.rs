@@ -46,9 +46,37 @@ pub enum ReferenceKind {
     User,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractionKind {
+    Confirm,
+    Select,
+    Input,
+    Editor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum InteractionResponse {
+    Confirm { confirmed: bool },
+    Value { value: String },
+    Cancel,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Activity {
+    InteractionRequested {
+        request_id: String,
+        kind: InteractionKind,
+        title: String,
+        message: String,
+        options: Vec<String>,
+        initial_value: Option<String>,
+    },
+    InteractionResolved {
+        request_id: String,
+    },
     Prompt {
         text: String,
         actor: String,
@@ -163,6 +191,11 @@ pub enum Command {
     },
     AbortAgent {
         id: String,
+    },
+    RespondAgent {
+        id: String,
+        request_id: String,
+        response: InteractionResponse,
     },
 }
 

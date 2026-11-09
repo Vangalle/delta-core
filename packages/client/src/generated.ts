@@ -44,8 +44,26 @@ export type Command =
   | {
       id: string;
       type: "abort_agent";
+    }
+  | {
+      id: string;
+      request_id: string;
+      response: InteractionResponse;
+      type: "respond_agent";
     };
 export type ReferenceKind = "thread" | "user";
+export type InteractionResponse =
+  | {
+      confirmed: boolean;
+      type: "confirm";
+    }
+  | {
+      type: "value";
+      value: string;
+    }
+  | {
+      type: "cancel";
+    };
 export type Change =
   | {
       after?: string | null;
@@ -102,6 +120,19 @@ export type Content =
 export type SessionStatus = "running" | "idle" | "closed" | "interrupted" | "failed";
 export type Activity =
   | {
+      initial_value?: string | null;
+      kind: InteractionKind;
+      message: string;
+      options: string[];
+      request_id: string;
+      title: string;
+      type: "interaction_requested";
+    }
+  | {
+      request_id: string;
+      type: "interaction_resolved";
+    }
+  | {
       actor: string;
       text: string;
       type: "prompt";
@@ -150,6 +181,7 @@ export type Activity =
       data: unknown;
       type: "backend";
     };
+export type InteractionKind = "confirm" | "select" | "input" | "editor";
 export type Role = "owner" | "executor" | "editor" | "viewer";
 
 export interface Contract {

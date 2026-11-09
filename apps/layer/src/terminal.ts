@@ -25,6 +25,7 @@ export class TerminalView {
     client: DeltaClient,
     workspace: string,
     report: (error: unknown) => void,
+    returnToDocument: () => void,
   ) {
     this.canControl =
       content.controller === me.id &&
@@ -69,6 +70,13 @@ export class TerminalView {
     });
     this.terminal.open(surface);
     this.terminal.textarea?.setAttribute("aria-label", "Terminal input");
+    this.terminal.attachCustomKeyEventHandler((event) => {
+      if (event.key !== "Escape") return true;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.type === "keydown") returnToDocument();
+      return false;
+    });
     this.terminal.onData((data) => {
       if (this.canControl) send({ type: "terminal_input", id, data });
     });

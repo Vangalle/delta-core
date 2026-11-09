@@ -39,6 +39,11 @@ pub enum Effect {
     AbortAgent {
         id: String,
     },
+    RespondAgent {
+        id: String,
+        request_id: String,
+        response: InteractionResponse,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -292,6 +297,65 @@ impl Workspace {
                     prompt,
                 });
                 Ok(d)
+            }
+            Command::RespondAgent {
+                id,
+                request_id,
+                response,
+            } => {
+                let entry = self.control(actor, &id, false)?;
+                let Content::Agent {
+                    status: SessionStatus::Running,
+                    activities,
+                    ..
+                } = &entry.content
+                else {
+                    return Err(KernelError::Unavailable);
+                };
+                let mut pending = None;
+                for activity in activities {
+                    match activity {
+                        Activity::InteractionRequested {
+                            request_id: candidate,
+                            kind,
+                            options,
+                            ..
+                        } if candidate == &request_id => pending = Some((kind, options)),
+                        Activity::InteractionResolved {
+                            request_id: candidate,
+                        } if candidate == &request_id => pending = None,
+                        _ => {}
+                    }
+                }
+                let (kind, options) = pending.ok_or(KernelError::NotFound)?;
+                let valid = match (&response, kind) {
+                    (InteractionResponse::Cancel, _) => true,
+                    (InteractionResponse::Confirm { .. }, InteractionKind::Confirm) => true,
+                    (InteractionResponse::Value { value }, InteractionKind::Select) => {
+                        options.contains(value)
+                    }
+                    (
+                        InteractionResponse::Value { value },
+                        InteractionKind::Input | InteractionKind::Editor,
+                    ) => value.len() <= 262_144,
+                    _ => false,
+                };
+                if !valid {
+                    return Err(KernelError::Invalid);
+                }
+                Ok(Decision {
+                    changes: vec![Change::AgentActivity {
+                        id: id.clone(),
+                        activity: Activity::InteractionResolved {
+                            request_id: request_id.clone(),
+                        },
+                    }],
+                    effect: Some(Effect::RespondAgent {
+                        id,
+                        request_id,
+                        response,
+                    }),
+                })
             }
             Command::AbortAgent { id } => {
                 self.control(actor, &id, false)?;

@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run build -w @delta-core/layer",
     "test:e2e": "playwright test",
+    "test:live": "DELTA_LIVE=1 playwright test -c playwright.live.config.ts",
     "example": "node --experimental-strip-types examples/minimal-client.ts"
   },
   "devDependencies": {
