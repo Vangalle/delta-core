@@ -219,6 +219,11 @@ export class RichEditor {
     this.source.hidden = !this.sourceMode;
     this.toggle.textContent = this.sourceMode ? "Rich text" : "Markdown source";
     this.toggle.setAttribute("aria-label", this.toggle.textContent);
+    for (const control of this.element.querySelectorAll<HTMLButtonElement>(
+      ".rich-toolbar button",
+    )) {
+      control.disabled = this.sourceMode && control !== this.toggle;
+    }
     this.updateEmpty();
     this.onChange?.();
     this.focus();

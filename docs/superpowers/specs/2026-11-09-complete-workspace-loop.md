@@ -22,4 +22,8 @@ Escape is consumed by the inline terminal and returns focus to the document inse
 
 Latest completed run: selected `openai-codex/gpt-6-sol`, one real `read` tool call, 14,798 ms from user execution to checked publication/replay path. Evidence is bounded to this configured provider and task, not universal backend compatibility or a performance benchmark. Raw acceptance artifacts are in the ignored `.superpowers/acceptance` directory. The regular suite remains fixture-based only for Pi transport/lifecycle cases; real PTY, rich editor, publication, authorization and browser rendering use actual components.
 
+## Delivery review and corrections
+
+The independent read-only review accepted the real inference/tool/edit/publication/replay evidence and the Escape behavior, but found a private-preview image request leak and source-mode toolbar edits that could be discarded. Both were reproduced before changes. The host now uses a data-only image CSP, blocking Mermaid's native image prefetch before unpublished URLs reach the host; the browser request-spy regression verifies zero same-origin requests and successful recovery to an ordinary diagram. Rich formatting controls are disabled while editing Markdown source and reenabled on returning to rich mode. Both new tests passed RED→GREEN; the complete final regular suite is 28 Rust, 3 SDK and 18 browser tests, with the separately executed real inference acceptance also passing. No review findings remain open.
+
 Non-goals remain sandboxing, untrusted public multi-tenant hosting, distributed execution and full desktop packaging. The production build warns about large lazy Mermaid/editor chunks; functionality and typechecking pass, but bundle optimization is not measured here.
