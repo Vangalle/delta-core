@@ -1,0 +1,91 @@
+.agent-entry {
+  margin: 28px 0;
+}
+.agent-entry > .execution-header {
+  padding: 0 0 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.agent-request {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.agent-message {
+  margin: 16px 0;
+}
+.tool-result {
+  margin: 12px 0;
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+}
+.tool-result summary,
+.backend-event summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 5px 0;
+}
+.tool-result[open] summary {
+  color: var(--ink);
+}
+.tool-args {
+  color: var(--muted);
+  font-size: 11px;
+}
+.tool-output {
+  font-size: 12px;
+  color: var(--ink);
+}
+.backend-event {
+  margin: 8px 0;
+  color: var(--muted);
+}
+.agent-message.streaming {
+  white-space: pre-wrap;
+}
+.edit-result {
+  display: block;
+  margin: 8px 0 16px auto;
+}
+.model-identity {
+  color: var(--muted);
+  font-size: 10px;
+}
+.backend-event pre {
+  max-height: 320px;
+  overflow: auto;
+}
+.agent-interaction {
+  border-left: 2px solid var(--warning);
+  padding: 12px 16px;
+  margin: 16px 0;
+  background: #e4ba8905;
+}
+.agent-interaction h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.agent-interaction p {
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  margin-bottom: 10px;
+}
+.agent-interaction .interaction-note {
+  color: var(--muted);
+  font-size: 10px;
+}
+.interaction-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.interaction-controls input,
+.interaction-controls textarea,
+.interaction-controls select {
+  width: 100%;
+}

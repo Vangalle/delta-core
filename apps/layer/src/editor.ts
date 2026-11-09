@@ -6,6 +6,11 @@ import { Markdown } from "@tiptap/markdown";
 import { TableKit } from "@tiptap/extension-table";
 import { MermaidView } from "./content.ts";
 import { node, button } from "./ui.ts";
+import {
+  editorTools,
+  editorModeLabels,
+  type EditorAction,
+} from "./presentation.ts";
 
 const InlineCodeBlock = CodeBlock.extend({
   addNodeView() {
@@ -102,70 +107,40 @@ export class RichEditor {
       toolbar.append(item);
       return item;
     };
-    control("Bold", () => this.editor.chain().focus().toggleBold().run());
-    control("Italic", () => this.editor.chain().focus().toggleItalic().run());
-    control("Heading 2", () =>
-      this.editor.chain().focus().toggleHeading({ level: 2 }).run(),
-    );
-    control("Bullet list", () =>
-      this.editor.chain().focus().toggleBulletList().run(),
-    );
-    control("Numbered list", () =>
-      this.editor.chain().focus().toggleOrderedList().run(),
-    );
-    control("Quote", () =>
-      this.editor.chain().focus().toggleBlockquote().run(),
-    );
-    control("Code block", () =>
-      this.editor.chain().focus().toggleCodeBlock().run(),
-    );
-    control("Insert Mermaid", () =>
-      this.editor
-        .chain()
-        .focus()
-        .insertContent([
-          {
-            type: "codeBlock",
-            attrs: { language: "mermaid" },
-            content: [
-              { type: "text", text: "flowchart TD\n  A[Start] --> B[Next]" },
-            ],
-          },
-          { type: "paragraph" },
-        ])
-        .run(),
-    );
-    control("Table", () =>
-      this.editor
-        .chain()
-        .focus()
-        .insertTable({ rows: 3, cols: 2, withHeaderRow: true })
-        .run(),
-    );
-    control("Link", () => {
-      const url = window.prompt(
-        "Link URL (https://…)",
-        String(this.editor.getAttributes("link").href ?? "https://"),
-      );
-      if (url === null) return;
-      if (!url.trim()) {
-        this.editor.chain().focus().unsetLink().run();
-        return;
-      }
-      try {
-        if (!["http:", "https:", "mailto:"].includes(new URL(url).protocol))
-          return;
-      } catch {
-        return;
-      }
-      this.editor
-        .chain()
-        .focus()
-        .extendMarkRange("link")
-        .setLink({ href: url })
-        .run();
-    });
-    this.toggle = control("Markdown source", () => this.toggleSource());
+    const actions: Record<EditorAction, () => void> = {
+      bold: () => this.editor.chain().focus().toggleBold().run(),
+      italic: () => this.editor.chain().focus().toggleItalic().run(),
+      heading: () =>
+        this.editor.chain().focus().toggleHeading({ level: 2 }).run(),
+      bulletList: () => this.editor.chain().focus().toggleBulletList().run(),
+      orderedList: () => this.editor.chain().focus().toggleOrderedList().run(),
+      quote: () => this.editor.chain().focus().toggleBlockquote().run(),
+      codeBlock: () => this.editor.chain().focus().toggleCodeBlock().run(),
+      mermaid: () =>
+        this.editor
+          .chain()
+          .focus()
+          .insertContent([
+            {
+              type: "codeBlock",
+              attrs: { language: "mermaid" },
+              content: [
+                { type: "text", text: "flowchart TD\n  A[Start] --> B[Next]" },
+              ],
+            },
+            { type: "paragraph" },
+          ])
+          .run(),
+      table: () =>
+        this.editor
+          .chain()
+          .focus()
+          .insertTable({ rows: 3, cols: 2, withHeaderRow: true })
+          .run(),
+      link: () => this.editLink(),
+    };
+    for (const item of editorTools) control(item.label, actions[item.action]);
+    this.toggle = control(editorModeLabels.source, () => this.toggleSource());
     this.source.addEventListener("input", () => {
       this.source.style.height = `${Math.max(120, this.source.scrollHeight)}px`;
       this.onChange?.();
@@ -201,6 +176,29 @@ export class RichEditor {
     if (this.sourceMode) this.source.focus();
     else this.editor.commands.focus("end");
   }
+  private editLink(): void {
+    const url = window.prompt(
+      "Link URL (https://…)",
+      String(this.editor.getAttributes("link").href ?? "https://"),
+    );
+    if (url === null) return;
+    if (!url.trim()) {
+      this.editor.chain().focus().unsetLink().run();
+      return;
+    }
+    try {
+      if (!["http:", "https:", "mailto:"].includes(new URL(url).protocol))
+        return;
+    } catch {
+      return;
+    }
+    this.editor
+      .chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href: url })
+      .run();
+  }
   private updateEmpty(): void {
     this.editor.view.dom.classList.toggle("is-empty", this.editor.isEmpty);
   }
@@ -217,7 +215,9 @@ export class RichEditor {
     }
     this.host.hidden = this.sourceMode;
     this.source.hidden = !this.sourceMode;
-    this.toggle.textContent = this.sourceMode ? "Rich text" : "Markdown source";
+    this.toggle.textContent = this.sourceMode
+      ? editorModeLabels.rich
+      : editorModeLabels.source;
     this.toggle.setAttribute("aria-label", this.toggle.textContent);
     for (const control of this.element.querySelectorAll<HTMLButtonElement>(
       ".rich-toolbar button",

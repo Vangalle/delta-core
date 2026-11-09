@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import type { Content, DeltaClient, Member } from "@delta-core/client";
 import { node, button } from "./ui.ts";
+import { terminalAppearance } from "./presentation.ts";
 
 type TerminalContent = Extract<Content, { type: "terminal" }>;
 export class TerminalView {
@@ -58,15 +59,7 @@ export class TerminalView {
       cursorBlink: this.canControl,
       disableStdin: !this.canControl,
       scrollback: 10000,
-      fontFamily: '"SFMono-Regular", Consolas, monospace',
-      fontSize: 13,
-      lineHeight: 1.45,
-      theme: {
-        background: "#171b1c",
-        foreground: "#d2d8d6",
-        cursor: "#99c4ad",
-        selectionBackground: "#375347",
-      },
+      ...terminalAppearance(),
     });
     this.terminal.open(surface);
     this.terminal.textarea?.setAttribute("aria-label", "Terminal input");

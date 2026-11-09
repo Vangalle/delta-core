@@ -1,0 +1,156 @@
+.palette {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% - 10px);
+  left: 0;
+  width: min(400px, 100%);
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #222827;
+  box-shadow: 0 12px 32px #0003;
+  padding: 5px;
+}
+.palette-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 12px;
+  text-align: left;
+}
+.palette-item:first-child {
+  background: #ffffff05;
+}
+.rich-content,
+.rich-editor .tiptap {
+  white-space: normal;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.rich-content p,
+.rich-editor .tiptap p {
+  margin: 0 0 12px;
+}
+.rich-content p:last-child,
+.rich-editor .tiptap p:last-child {
+  margin-bottom: 0;
+}
+.rich-content h1,
+.rich-content h2,
+.rich-content h3,
+.rich-editor .tiptap h1,
+.rich-editor .tiptap h2,
+.rich-editor .tiptap h3 {
+  line-height: 1.4;
+  font-weight: 600;
+  margin: 24px 0 12px;
+  letter-spacing: -0.4px;
+}
+.rich-content h1,
+.rich-editor .tiptap h1 {
+  font-size: 27px;
+}
+.rich-content h2,
+.rich-editor .tiptap h2 {
+  font-size: 23px;
+}
+.rich-content h3,
+.rich-editor .tiptap h3 {
+  font-size: 19px;
+}
+.rich-content ul,
+.rich-content ol,
+.rich-editor .tiptap ul,
+.rich-editor .tiptap ol {
+  padding-left: 24px;
+  margin: 12px 0;
+}
+.rich-content li p,
+.rich-editor .tiptap li p {
+  margin-bottom: 0;
+}
+.rich-content blockquote,
+.rich-editor .tiptap blockquote {
+  margin: 16px 0;
+  padding: 0 16px;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+.rich-content pre,
+.rich-editor pre {
+  padding: 14px 16px;
+  border-radius: 4px;
+  background: #15191a;
+  white-space: pre-wrap;
+}
+.rich-content :not(pre) > code,
+.rich-editor :not(pre) > code {
+  background: #ffffff09;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.rich-content table,
+.rich-editor table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+}
+.rich-content th,
+.rich-content td,
+.rich-editor th,
+.rich-editor td {
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  min-width: 60px;
+  vertical-align: top;
+}
+.rich-content th,
+.rich-editor th {
+  text-align: left;
+  background: #ffffff04;
+}
+.rich-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0 0 12px;
+  padding: 4px 0;
+}
+.format-button {
+  padding: 4px 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.format-button:hover,
+.format-button:focus-visible {
+  color: var(--ink);
+  background: #ffffff08;
+}
+.rich-editor .tiptap {
+  position: relative;
+  min-height: 100px;
+  outline: none;
+  font-size: var(--font-document);
+}
+.rich-editor .tiptap.is-empty:before {
+  content: attr(data-placeholder);
+  position: absolute;
+  color: #738079;
+  pointer-events: none;
+}
+.rich-editor .markdown-source {
+  display: block;
+  width: 100%;
+  min-height: 200px;
+  font: 13px/1.8 var(--font-code);
+}
+.rich-editor .editable-code-block {
+  margin: 16px 0;
+}
+.rich-editor .editable-code-block pre {
+  margin-bottom: 0;
+}
+.rich-editor .editable-code-block code {
+  white-space: pre-wrap;
+}

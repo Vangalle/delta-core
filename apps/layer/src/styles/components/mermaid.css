@@ -1,0 +1,54 @@
+.mermaid-diagram {
+  margin: 16px 0;
+  padding: 12px 0;
+  overflow-x: auto;
+}
+.mermaid-diagram svg {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  max-height: 720px;
+  margin: auto;
+  color: var(--ink);
+}
+.mermaid-diagram svg text,
+.mermaid-diagram svg tspan {
+  fill: var(--ink);
+  font:
+    14px system-ui,
+    sans-serif;
+}
+.mermaid-diagram svg rect,
+.mermaid-diagram svg polygon,
+.mermaid-diagram svg circle,
+.mermaid-diagram svg ellipse {
+  fill: var(--diagram-fill);
+  stroke: var(--diagram-stroke);
+}
+.mermaid-diagram svg .edgePath path,
+.mermaid-diagram svg .flowchart-link,
+.mermaid-diagram svg line {
+  stroke: var(--diagram-edge);
+  fill: none;
+}
+.mermaid-diagram svg marker path {
+  fill: var(--diagram-edge);
+  stroke: var(--diagram-edge);
+}
+.diagram-source {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.diagram-source summary {
+  cursor: pointer;
+}
+.diagram-source pre {
+  margin: 8px 0;
+}
+.diagram-error {
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
