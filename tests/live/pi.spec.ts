@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { DeltaClient, type Content } from "@delta-core/client";
+import { pasteMarkdown } from "../markdown.ts";
 
 async function enter(page: Page, workspace: string, token: string) {
   await page.goto(`/?workspace=${workspace}`);
@@ -33,13 +34,15 @@ test("real Pi inference reads a fresh file, shares real collapsible results and 
   try {
     await enter(author, workspace.id, "live-owner");
     await enter(watching, workspace.id, observer.token);
-    await author
-      .getByRole("textbox", { name: "Private draft", exact: true })
-      .fill(
-        'This is an explicit, bounded product acceptance task. Use the read tool exactly once to read live-evidence.txt in your current directory. Do not use bash, other tools, other files, network browsing or subagents; never modify files. Then respond in Markdown with heading "## Live verification", the exact nonce from the file in bold, and a fenced mermaid block containing:\nflowchart TD\n  A[Read file] --> B[Verified]\nDo not include additional diagrams. Keep prose below 100 words. The nonce is not provided in this prompt: obtain it from the real tool result.',
-      );
+    await expect(
+      author.getByRole("combobox", { name: "Agent replies" }),
+    ).toHaveValue("mentions_only");
+    await pasteMarkdown(
+      author.getByRole("textbox", { name: "Private draft", exact: true }),
+      '[@agent](delta-agent:pi) This is an explicit, bounded product acceptance task. Use the read tool exactly once to read live-evidence.txt in your current directory. Do not use bash, other tools, other files, network browsing or subagents; never modify files. Then respond in Markdown with heading "## Live verification", the exact nonce from the file in bold, and a fenced mermaid block containing:\nflowchart TD\n  A[Read file] --> B[Verified]\nDo not include additional diagrams. Also include the inline LaTeX formula $E=mc^2$. Keep prose below 100 words. The nonce is not provided in this prompt: obtain it from the real tool result.',
+    );
     const started = Date.now();
-    await author.getByRole("button", { name: "Ask Pi", exact: true }).click();
+    await author.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(async () => {
       const collaboration = author.locator(".agent-interaction").filter({
         has: author.getByRole("heading", { name: /model collaboration/i }),
@@ -59,6 +62,7 @@ test("real Pi inference reads a fresh file, shares real collapsible results and 
       (entry) => entry.content.type === "agent",
     );
     expect(entry).toBeDefined();
+    expect(entry!.content).toMatchObject({ source_entry: expect.any(String) });
     agentId = entry!.id;
     const content = entry!.content as Extract<Content, { type: "agent" }>;
     const selected = content.activities.find(
@@ -100,6 +104,8 @@ test("real Pi inference reads a fresh file, shares real collapsible results and 
     await expect(
       watching.locator(".agent-message .mermaid-diagram svg"),
     ).toContainText("Verified");
+    await expect(watching.locator(".agent-message .katex")).toHaveCount(1);
+    await expect(author.locator(".agent-request")).toHaveCount(0);
     const disclosure = watching
       .locator("details.tool-result")
       .filter({ has: watching.locator("summary", { hasText: /^read ·/ }) })
@@ -126,8 +132,8 @@ test("real Pi inference reads a fresh file, shares real collapsible results and 
     await expect(draft.locator(".mermaid-diagram svg")).toContainText(
       /Human\s*reviewed/,
     );
-    expect((await client.snapshot(workspace.id)).entries).toHaveLength(1);
-    await expect(watching.locator(".published-text")).toHaveCount(0);
+    expect((await client.snapshot(workspace.id)).entries).toHaveLength(2);
+    await expect(watching.locator(".published-text")).toHaveCount(1);
     await author.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(
       watching.locator(".published-text .mermaid-diagram svg"),
@@ -148,6 +154,8 @@ test("real Pi inference reads a fresh file, shares real collapsible results and 
     const evidence = {
       real_model_inference: true,
       fixture: false,
+      native_agent_mention_submission: true,
+      agent_math_rendered: true,
       elapsed_ms: Date.now() - started,
       model: selected?.type === "backend" ? selected.data : null,
       tool_calls: tools.map((activity) => ({

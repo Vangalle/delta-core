@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { pasteMarkdown, sourceShortcut } from "./markdown.ts";
 const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function enter(page: Page, id: string, token = "e2e-owner") {
   await page.goto(`/?workspace=${id}`);
@@ -29,12 +30,7 @@ test("rich formatting is editable, private until publish, and survives a reload 
       name: "Private draft",
       exact: true,
     });
-    await draft.fill("A rich heading");
-    await draft.press("Meta+a");
-    await author.getByRole("button", { name: "Bold", exact: true }).click();
-    await author
-      .getByRole("button", { name: "Heading 2", exact: true })
-      .click();
+    await draft.pressSequentially("## **A rich heading**");
     await expect(draft.locator("h2 strong")).toHaveText("A rich heading");
     await expect(observer.locator(".published-text")).toHaveCount(0);
     await author.getByRole("button", { name: "Publish", exact: true }).click();
@@ -54,9 +50,8 @@ test("rich formatting is editable, private until publish, and survives a reload 
         .locator("h2 strong"),
     ).toHaveText("A rich heading");
     await author
-      .locator(".edit-draft")
-      .getByRole("button", { name: "Markdown source", exact: true })
-      .click();
+      .getByRole("textbox", { name: "Edit draft", exact: true })
+      .press(sourceShortcut);
     await expect(
       author.getByRole("textbox", {
         name: "Edit draft Markdown source",
@@ -75,8 +70,8 @@ test("Markdown roundtrips lists, tables, links and code without executing embedd
   const workspace = await client.createWorkspace("Document structures");
   await enter(page, workspace.id);
   await page
-    .getByRole("button", { name: "Markdown source", exact: true })
-    .click();
+    .getByRole("textbox", { name: "Private draft", exact: true })
+    .press(sourceShortcut);
   const source = page.getByRole("textbox", {
     name: "Private draft Markdown source",
     exact: true,
@@ -84,7 +79,7 @@ test("Markdown roundtrips lists, tables, links and code without executing embedd
   await source.fill(
     '## Notes\n\nA **strong** and *emphasized* [link](https://example.com).\n\n- First\n- Second\n\n| Name | State |\n| --- | --- |\n| Kernel | Ready |\n\n```rust\nfn main() {}\n```\n\n<img src=x onerror="window.richAttack=true"><script>window.richAttack=true</script>',
   );
-  await page.getByRole("button", { name: "Rich text", exact: true }).click();
+  await source.press(sourceShortcut);
   const draft = page.getByRole("textbox", {
     name: "Private draft",
     exact: true,
@@ -115,14 +110,14 @@ test("Mermaid has an editable source, inline preview, shared rendering and error
 }) => {
   const workspace = await client.createWorkspace("Mermaid editing");
   await enter(page, workspace.id);
-  await page
-    .getByRole("button", { name: "Insert Mermaid", exact: true })
-    .click();
   const draft = page.getByRole("textbox", {
     name: "Private draft",
     exact: true,
   });
-  await draft.locator("pre code").fill("flowchart TD\n  A[Write] --> B[Run]");
+  await pasteMarkdown(
+    draft,
+    "```mermaid\nflowchart TD\n  A[Write] --> B[Run]\n```",
+  );
   await expect(draft.locator(".mermaid-diagram svg")).toBeVisible();
   await expect(draft.locator(".mermaid-diagram svg")).toContainText("Write");
   await page.getByRole("button", { name: "Publish", exact: true }).click();

@@ -1,5 +1,7 @@
 use delta_protocol::*;
+mod collaboration;
 mod context;
+pub use collaboration::parse_mentions;
 pub use context::{validate_quote_source, validate_quotes};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -59,6 +61,7 @@ pub struct Decision {
 pub struct Workspace {
     pub info: WorkspaceInfo,
     pub entries: Vec<Entry>,
+    pub collaboration: Collaboration,
 }
 
 impl Workspace {
@@ -66,6 +69,7 @@ impl Workspace {
         Self {
             info: WorkspaceInfo { id, title },
             entries: Vec::new(),
+            collaboration: Collaboration::default(),
         }
     }
 
@@ -99,6 +103,10 @@ impl Workspace {
                     id,
                     revision: 1,
                     author: actor.id.clone(),
+                    mentions: match &content {
+                        Content::Text { text } => parse_mentions(text, "pi"),
+                        _ => Vec::new(),
+                    },
                     content,
                     quotes,
                 },
@@ -143,16 +151,39 @@ impl Workspace {
     }
 
     pub fn decide(&self, actor: &Member, command: Command) -> Result<Decision, KernelError> {
+        if matches!(&command, Command::JoinWorkspace) {
+            return Ok(self.join(actor));
+        }
         if !actor.role.can_edit() {
             return Err(KernelError::Forbidden);
         }
         match &command {
-            Command::PublishText { quotes, .. } | Command::PromptAgent { quotes, .. } => {
-                validate_quotes(quotes)?
-            }
+            Command::PublishText { quotes, .. }
+            | Command::PromptAgent { quotes, .. }
+            | Command::SubmitMessage { quotes, .. } => validate_quotes(quotes)?,
             _ => {}
         }
         match command {
+            Command::JoinWorkspace => Ok(Decision::default()),
+            Command::SetReplyMode { mode } => {
+                if !actor.role.can_execute() {
+                    return Err(KernelError::Forbidden);
+                }
+                Ok(Decision {
+                    changes: vec![Change::ReplyModeChanged {
+                        mode,
+                        explicit: true,
+                    }],
+                    effect: None,
+                })
+            }
+            Command::SubmitMessage {
+                id,
+                text,
+                after,
+                quotes,
+                backend,
+            } => self.submit(actor, id, text, after, quotes, backend),
             Command::PublishText {
                 id,
                 base_revision,
@@ -174,6 +205,7 @@ impl Workspace {
                         changes: vec![Change::TextPublished {
                             id,
                             revision: base_revision + 1,
+                            mentions: parse_mentions(&text, "pi"),
                             text,
                             actor: actor.id.clone(),
                             quotes,
@@ -305,6 +337,7 @@ impl Workspace {
                             status: SessionStatus::Running,
                             prompt: prompt.clone(),
                             activities: Vec::new(),
+                            source_entry: None,
                         },
                         quotes.clone(),
                     )?
@@ -388,6 +421,15 @@ impl Workspace {
 
     pub fn apply(&mut self, change: Change) {
         match change {
+            Change::ParticipantJoined { member } => {
+                if !self.collaboration.participants.contains(&member) {
+                    self.collaboration.participants.push(member);
+                }
+            }
+            Change::ReplyModeChanged { mode, explicit } => {
+                self.collaboration.reply_mode = mode;
+                self.collaboration.mode_explicit = explicit;
+            }
             Change::Inserted { entry, after } => {
                 let pos = after
                     .and_then(|a| self.entries.iter().position(|e| e.id == a).map(|i| i + 1))
@@ -400,12 +442,14 @@ impl Workspace {
                 text,
                 actor,
                 quotes,
+                mentions,
             } => {
                 if let Some(e) = self.entries.iter_mut().find(|e| e.id == id) {
                     e.revision = revision;
                     e.author = actor;
                     e.content = Content::Text { text };
                     e.quotes = quotes;
+                    e.mentions = mentions;
                 }
             }
             Change::TerminalOutput { id, data } => {

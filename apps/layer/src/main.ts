@@ -8,6 +8,7 @@ import {
   type WorkspaceInfo,
   type Role,
   type ContextQuote,
+  type ReplyMode,
 } from "@delta-core/client";
 import { TerminalView } from "./terminal.ts";
 import { AgentView } from "./agent.ts";
@@ -22,6 +23,7 @@ import {
   type QuoteNavigation,
 } from "./context-quotes.ts";
 import { SelectionQuotes } from "./selection.ts";
+import { AuthorIdentity } from "./identity.ts";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 
@@ -35,6 +37,9 @@ const palette = get("palette");
 const flow = get("flow");
 const publish = get<HTMLButtonElement>("publish");
 const ask = get<HTMLButtonElement>("ask-pi");
+const replyMode = get<HTMLSelectElement>("reply-mode");
+const draftIdentity = new AuthorIdentity();
+compose.prepend(draftIdentity.element);
 publish.setAttribute("aria-label", "Publish");
 let client: DeltaClient;
 let me: Member;
@@ -241,13 +246,33 @@ function renderEntries(): void {
         view = { element, update: () => {}, dispose: () => {} };
       }
       const contentView = view;
+      const identity = new AuthorIdentity();
+      const shell = node("section", "document-entry");
+      shell.dataset.entryId = entry.id;
+      shell.dataset.kind = entry.content.type;
+      shell.append(identity.element, contentView.element);
       const references = new ContextQuotes(quoteNavigation);
       references.element.classList.add("published-quotes");
       contentView.element.prepend(references.element);
       contentView.element.dataset.entryId = entry.id;
       view = {
-        element: contentView.element,
+        element: shell,
         update: (value) => {
+          const agent = value.content.type === "agent";
+          const member = members.find((member) => member.id === value.author);
+          const author =
+            agent && value.content.type === "agent"
+              ? `agent:${value.content.backend}`
+              : value.author;
+          shell.dataset.authorId = author;
+          identity.update(
+            author,
+            agent
+              ? "Agent"
+              : (member?.name ??
+                  (value.author === me.id ? me.name : "Collaborator")),
+            agent,
+          );
           contentView.update(value);
           references.value = value.quotes ?? [];
         },
@@ -272,6 +297,7 @@ function renderEntries(): void {
 
 async function openWorkspace(id: string): Promise<void> {
   const generation = ++navigation;
+  await client.joinWorkspace(id);
   const next = await client.snapshot(id);
   if (generation !== navigation) return;
   subscription?.abort();
@@ -297,6 +323,7 @@ async function openWorkspace(id: string): Promise<void> {
   history.replaceState(null, "", `/?workspace=${encodeURIComponent(id)}`);
   renderNavigation();
   renderEntries();
+  renderPolicy();
   updatePalette();
   const current = new AbortController();
   subscription = current;
@@ -308,6 +335,18 @@ async function openWorkspace(id: string): Promise<void> {
         if (current !== subscription) return;
         applyEvent(snapshot, event);
         renderEntries();
+        renderPolicy();
+        if (event.change.type === "participant_joined") {
+          void client
+            .members()
+            .then((nextMembers) => {
+              if (current !== subscription) return;
+              members = nextMembers;
+              renderEntries();
+              updatePalette();
+            })
+            .catch(report);
+        }
       },
       {
         signal: current.signal,
@@ -324,6 +363,28 @@ async function openWorkspace(id: string): Promise<void> {
     )
     .catch(report);
 }
+function renderPolicy(): void {
+  replyMode.value = snapshot.collaboration?.reply_mode ?? "mentions_only";
+  replyMode.disabled = me.role !== "owner" && me.role !== "executor";
+  replyMode.title = replyMode.disabled
+    ? "Execution access is required to change Agent reply mode"
+    : "Saved for this workspace; leaving does not change the mode";
+}
+replyMode.addEventListener("change", () => {
+  if (busy) {
+    renderPolicy();
+    return;
+  }
+  const mode = replyMode.value as ReplyMode;
+  void act(async () => {
+    try {
+      await client.setReplyMode(snapshot.workspace.id, mode);
+    } finally {
+      renderPolicy();
+    }
+  });
+});
+
 function renderNavigation(): void {
   const list = get("workspace-list");
   list.replaceChildren();
@@ -343,6 +404,7 @@ function renderNavigation(): void {
 async function connect(token: string): Promise<void> {
   client = new DeltaClient(location.origin, token);
   me = await client.me();
+  draftIdentity.update(me.id, me.name);
   [members, workspaces] = await Promise.all([
     client.members(),
     client.workspaces(),
@@ -474,21 +536,21 @@ function updatePalette(): void {
           updatePalette();
         },
       });
+    if ("agent".startsWith(keyword))
+      choices.push({
+        label: "Agent · ask Pi",
+        action: () => {
+          draft.insertMention("agent", "pi", "agent");
+          updatePalette();
+        },
+      });
     if (keyword === "users")
       choices.push(
         ...members.map((m) => ({
           label: `Mention ${m.name}`,
           action: () => {
-            void act(async () =>
-              insert({
-                type: "insert_reference",
-                id: crypto.randomUUID(),
-                kind: "user",
-                target: m.id,
-                label: m.name,
-                after,
-              }),
-            );
+            draft.insertMention("user", m.id, m.name);
+            updatePalette();
           },
         })),
       );
@@ -515,15 +577,29 @@ publish.addEventListener("click", () => {
     const id = crypto.randomUUID();
     const generation = navigation;
     const key = draftKey();
-    await client.command(snapshot.workspace.id, {
-      type: "publish_text",
+    const receipt = await client.submitMessage(snapshot.workspace.id, {
       id,
-      base_revision: 0,
       text,
       after,
       quotes,
+      backend: "pi",
     });
     completeDraft(generation, key, text, id, "", quotes);
+    if (
+      generation === navigation &&
+      receipt.agent_reply === "permission_required"
+    )
+      report(
+        new Error(
+          "Your text was published. Agent replies require execution access; this mention did not run code.",
+        ),
+      );
+    if (generation === navigation && receipt.agent_reply === "failed")
+      report(
+        new Error(
+          "Your text was published, but the Agent could not start. See the shared execution record.",
+        ),
+      );
   });
 });
 ask.addEventListener("click", () => {

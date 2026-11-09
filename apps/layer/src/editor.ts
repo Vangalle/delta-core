@@ -5,12 +5,13 @@ import CodeBlock from "@tiptap/extension-code-block";
 import { Markdown } from "@tiptap/markdown";
 import { TableKit } from "@tiptap/extension-table";
 import { MermaidView } from "./content.ts";
-import { node, button } from "./ui.ts";
+import { node } from "./ui.ts";
 import {
-  editorTools,
-  editorModeLabels,
-  type EditorAction,
-} from "./presentation.ts";
+  InlineMention,
+  mentionMarkdown,
+  type MentionType,
+} from "./mentions.ts";
+import { InlineFormula, BlockFormula } from "./math.ts";
 
 const InlineCodeBlock = CodeBlock.extend({
   addNodeView() {
@@ -55,17 +56,13 @@ export class RichEditor {
   private source = node("textarea", "markdown-source");
   private host = node("div", "rich-editor-host");
   private sourceMode = false;
-  private toggle: HTMLButtonElement;
   constructor(element: HTMLElement, label: string, placeholder = "") {
     this.element = element;
     element.classList.add("rich-editor");
-    const toolbar = node("div", "rich-toolbar");
-    toolbar.setAttribute("role", "toolbar");
-    toolbar.setAttribute("aria-label", `${label} formatting`);
     this.source.setAttribute("aria-label", `${label} Markdown source`);
     this.source.spellcheck = false;
     this.source.hidden = true;
-    element.replaceChildren(toolbar, this.host, this.source);
+    element.replaceChildren(this.host, this.source);
     this.editor = new Editor({
       element: this.host,
       extensions: [
@@ -79,6 +76,9 @@ export class RichEditor {
         }),
         InlineCodeBlock,
         TableKit,
+        InlineMention,
+        InlineFormula,
+        BlockFormula,
         Markdown,
       ],
       content: "",
@@ -91,7 +91,22 @@ export class RichEditor {
           "data-placeholder": placeholder,
           spellcheck: "false",
         },
-        handleKeyDown: (_view, event) => this.onKeyDown?.(event) ?? false,
+        handleKeyDown: (_view, event) => this.handleKey(event),
+        handlePaste: (_view, event) => {
+          if (
+            /\bdata-pm-slice\s*=/.test(
+              event.clipboardData?.getData("text/html") ?? "",
+            )
+          )
+            return false;
+          const text = event.clipboardData?.getData("text/plain");
+          if (!text) return false;
+          if (this.editor.isActive("codeBlock")) return false;
+          event.preventDefault();
+          return this.editor.commands.insertContent(text, {
+            contentType: "markdown",
+          });
+        },
       },
       onUpdate: () => {
         this.updateEmpty();
@@ -99,56 +114,26 @@ export class RichEditor {
       },
       onSelectionUpdate: () => this.onSelectionChange?.(),
     });
-    const control = (title: string, action: () => void) => {
-      const item = button(title, action, "format-button");
-      item.setAttribute("aria-label", title);
-      item.title = title;
-      item.addEventListener("mousedown", (event) => event.preventDefault());
-      toolbar.append(item);
-      return item;
-    };
-    const actions: Record<EditorAction, () => void> = {
-      bold: () => this.editor.chain().focus().toggleBold().run(),
-      italic: () => this.editor.chain().focus().toggleItalic().run(),
-      heading: () =>
-        this.editor.chain().focus().toggleHeading({ level: 2 }).run(),
-      bulletList: () => this.editor.chain().focus().toggleBulletList().run(),
-      orderedList: () => this.editor.chain().focus().toggleOrderedList().run(),
-      quote: () => this.editor.chain().focus().toggleBlockquote().run(),
-      codeBlock: () => this.editor.chain().focus().toggleCodeBlock().run(),
-      mermaid: () =>
-        this.editor
-          .chain()
-          .focus()
-          .insertContent([
-            {
-              type: "codeBlock",
-              attrs: { language: "mermaid" },
-              content: [
-                { type: "text", text: "flowchart TD\n  A[Start] --> B[Next]" },
-              ],
-            },
-            { type: "paragraph" },
-          ])
-          .run(),
-      table: () =>
-        this.editor
-          .chain()
-          .focus()
-          .insertTable({ rows: 3, cols: 2, withHeaderRow: true })
-          .run(),
-      link: () => this.editLink(),
-    };
-    for (const item of editorTools) control(item.label, actions[item.action]);
-    this.toggle = control(editorModeLabels.source, () => this.toggleSource());
     this.source.addEventListener("input", () => {
       this.source.style.height = `${Math.max(120, this.source.scrollHeight)}px`;
       this.onChange?.();
     });
     this.source.addEventListener("keydown", (event) => {
-      this.onKeyDown?.(event);
+      this.handleKey(event);
     });
     this.updateEmpty();
+  }
+  private handleKey(event: KeyboardEvent): boolean {
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      event.shiftKey &&
+      event.key.toLowerCase() === "m"
+    ) {
+      event.preventDefault();
+      this.toggleSource();
+      return true;
+    }
+    return this.onKeyDown?.(event) ?? false;
   }
   get value(): string {
     return this.sourceMode ? this.source.value : this.editor.getMarkdown();
@@ -176,29 +161,6 @@ export class RichEditor {
     if (this.sourceMode) this.source.focus();
     else this.editor.commands.focus("end");
   }
-  private editLink(): void {
-    const url = window.prompt(
-      "Link URL (https://…)",
-      String(this.editor.getAttributes("link").href ?? "https://"),
-    );
-    if (url === null) return;
-    if (!url.trim()) {
-      this.editor.chain().focus().unsetLink().run();
-      return;
-    }
-    try {
-      if (!["http:", "https:", "mailto:"].includes(new URL(url).protocol))
-        return;
-    } catch {
-      return;
-    }
-    this.editor
-      .chain()
-      .focus()
-      .extendMarkRange("link")
-      .setLink({ href: url })
-      .run();
-  }
   private updateEmpty(): void {
     this.editor.view.dom.classList.toggle("is-empty", this.editor.isEmpty);
   }
@@ -215,15 +177,6 @@ export class RichEditor {
     }
     this.host.hidden = this.sourceMode;
     this.source.hidden = !this.sourceMode;
-    this.toggle.textContent = this.sourceMode
-      ? editorModeLabels.rich
-      : editorModeLabels.source;
-    this.toggle.setAttribute("aria-label", this.toggle.textContent);
-    for (const control of this.element.querySelectorAll<HTMLButtonElement>(
-      ".rich-toolbar button",
-    )) {
-      control.disabled = this.sourceMode && control !== this.toggle;
-    }
     this.updateEmpty();
     this.onChange?.();
     this.focus();
@@ -280,6 +233,24 @@ export class RichEditor {
         .focus()
         .insertContentAt({ from: trigger.from, to: trigger.to }, text)
         .run();
+  }
+  insertMention(kind: MentionType, target: string, label: string): void {
+    const trigger = this.trigger();
+    if (!trigger) return;
+    if (this.sourceMode) {
+      this.setTrigger(mentionMarkdown(kind, target, label));
+      this.focus();
+    } else {
+      this.editor
+        .chain()
+        .focus()
+        .insertContentAt(
+          { from: trigger.from, to: trigger.to },
+          { type: "inlineMention", attrs: { kind, target, label } },
+        )
+        .run();
+      this.editor.view.focus();
+    }
   }
   dispose(): void {
     this.editor.destroy();

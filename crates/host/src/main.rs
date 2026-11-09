@@ -37,6 +37,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let service =
         Service::open(&data, &cwd, &token).map_err(|e| format!("host initialization: {e:?}"))?;
+    if let Ok(mode) = std::env::var("DELTA_DEFAULT_REPLY_MODE") {
+        let mode = match mode.as_str() {
+            "auto" => delta_protocol::ReplyMode::Auto,
+            "mentions_only" => delta_protocol::ReplyMode::MentionsOnly,
+            _ => return Err("DELTA_DEFAULT_REPLY_MODE must be auto or mentions_only".into()),
+        };
+        service
+            .set_default_reply_mode(mode)
+            .await
+            .map_err(|error| format!("reply mode initialization: {error:?}"))?;
+    }
     if let Some(executable) = std::env::var_os("DELTA_PI") {
         service
             .register_backend(

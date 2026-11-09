@@ -8,6 +8,7 @@ import type {
   InviteMember,
   Receipt,
   BackendInfo,
+  ReplyMode,
 } from "./generated.ts";
 export type * from "./generated.ts";
 
@@ -76,6 +77,18 @@ export class DeltaClient {
   }
   snapshot(workspace: string): Promise<Snapshot> {
     return this.request(`/workspaces/${encodeURIComponent(workspace)}`);
+  }
+  joinWorkspace(workspace: string): Promise<Receipt> {
+    return this.command(workspace, { type: "join_workspace" });
+  }
+  setReplyMode(workspace: string, mode: ReplyMode): Promise<Receipt> {
+    return this.command(workspace, { type: "set_reply_mode", mode });
+  }
+  submitMessage(
+    workspace: string,
+    message: Omit<Extract<Command, { type: "submit_message" }>, "type">,
+  ): Promise<Receipt> {
+    return this.command(workspace, { type: "submit_message", ...message });
   }
   command(workspace: string, command: Command): Promise<Receipt> {
     return this.request(
@@ -172,7 +185,20 @@ export class DeltaClient {
 export function applyEvent(snapshot: Snapshot, event: Event): void {
   if (event.sequence <= snapshot.cursor) return;
   const c = event.change;
-  if (c.type === "inserted") {
+  if (c.type === "participant_joined" || c.type === "reply_mode_changed") {
+    snapshot.collaboration ??= {
+      reply_mode: "auto",
+      mode_explicit: false,
+      participants: [],
+    };
+    if (c.type === "participant_joined") {
+      if (!snapshot.collaboration.participants.includes(c.member))
+        snapshot.collaboration.participants.push(c.member);
+    } else {
+      snapshot.collaboration.reply_mode = c.mode;
+      snapshot.collaboration.mode_explicit = c.explicit;
+    }
+  } else if (c.type === "inserted") {
     const anchor = c.after
       ? snapshot.entries.findIndex((e) => e.id === c.after)
       : -1;
@@ -189,6 +215,7 @@ export function applyEvent(snapshot: Snapshot, event: Event): void {
         e.revision = c.revision;
         e.author = c.actor;
         e.quotes = structuredClone(c.quotes ?? []);
+        e.mentions = structuredClone(c.mentions ?? []);
       } else if (c.type === "terminal_output" && e.content.type === "terminal")
         e.content.output.push(c.data);
       else if (

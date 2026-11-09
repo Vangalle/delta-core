@@ -109,15 +109,6 @@
 #draft:focus-visible {
   outline: none;
 }
-.compose:focus-within:before {
-  content: "";
-  position: absolute;
-  top: 14px;
-  left: -18px;
-  height: 28px;
-  width: 2px;
-  background: #698d76;
-}
 .composer-footer {
   display: flex;
   align-items: center;

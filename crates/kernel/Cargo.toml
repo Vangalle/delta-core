@@ -5,4 +5,9 @@ edition.workspace = true
 
 [dependencies]
 delta-protocol = { path = "../protocol" }
+linkify = "0.10"
+pulldown-cmark = { version = "0.13", default-features = false }
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { pasteMarkdown, sourceShortcut } from "./markdown.ts";
 const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function login(page: import("@playwright/test").Page, id: string) {
   await page.goto(`/?workspace=${id}`);
@@ -25,13 +26,14 @@ test("a private native Mermaid image cannot send unpublished text in a same-orig
     });
   });
   await login(page, workspace.id);
-  await page
-    .getByRole("button", { name: "Insert Mermaid", exact: true })
-    .click();
   const draft = page.getByRole("textbox", {
     name: "Private draft",
     exact: true,
   });
+  await pasteMarkdown(
+    draft,
+    "```mermaid\nflowchart TD\n  A[Start] --> B[Next]\n```",
+  );
   await draft
     .locator("pre code")
     .fill(
@@ -55,36 +57,32 @@ test("a private native Mermaid image cannot send unpublished text in a same-orig
   );
 });
 
-test("source mode disables rich formatting controls instead of discarding hidden edits", async ({
+test("the unobtrusive source shortcut preserves edits without formatting controls", async ({
   page,
 }) => {
   const workspace = await client.createWorkspace("Source mode controls");
   await login(page, workspace.id);
   await page
-    .getByRole("button", { name: "Markdown source", exact: true })
-    .click();
+    .getByRole("textbox", { name: "Private draft", exact: true })
+    .press(sourceShortcut);
   const source = page.getByRole("textbox", {
     name: "Private draft Markdown source",
     exact: true,
   });
   await source.fill("# Source remains intact");
-  await expect(
-    page.getByRole("button", { name: "Insert Mermaid", exact: true }),
-  ).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "Bold", exact: true }),
-  ).toBeDisabled();
+  await expect(page.getByRole("toolbar")).toHaveCount(0);
   await expect(source).toHaveValue("# Source remains intact");
-  await page.getByRole("button", { name: "Rich text", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Insert Mermaid", exact: true }),
-  ).toBeEnabled();
-  await page
-    .getByRole("button", { name: "Insert Mermaid", exact: true })
-    .click();
-  await expect(
-    page
-      .getByRole("textbox", { name: "Private draft", exact: true })
-      .locator(".mermaid-diagram svg"),
-  ).toBeVisible();
+  await source.press(sourceShortcut);
+  const draft = page.getByRole("textbox", {
+    name: "Private draft",
+    exact: true,
+  });
+  await expect(draft.locator("h1")).toHaveText("Source remains intact");
+  await draft.press(sourceShortcut);
+  await source.fill(
+    "# Source remains intact\n\n```mermaid\nflowchart TD\n A[Write] --> B[Preview]\n```",
+  );
+  await source.press(sourceShortcut);
+  await expect(draft.locator("h1")).toHaveText("Source remains intact");
+  await expect(draft.locator(".mermaid-diagram svg")).toContainText("Preview");
 });

@@ -308,6 +308,14 @@
         }
       ]
     },
+    "AgentReplyOutcome": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "permission_required",
+        "failed"
+      ]
+    },
     "ApiError": {
       "type": "object",
       "properties": {
@@ -343,6 +351,42 @@
         {
           "type": "object",
           "properties": {
+            "member": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "participant_joined"
+            }
+          },
+          "required": [
+            "type",
+            "member"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "explicit": {
+              "type": "boolean"
+            },
+            "mode": {
+              "$ref": "#/$defs/ReplyMode"
+            },
+            "type": {
+              "type": "string",
+              "const": "reply_mode_changed"
+            }
+          },
+          "required": [
+            "type",
+            "mode",
+            "explicit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "after": {
               "type": [
                 "string",
@@ -370,6 +414,12 @@
             },
             "id": {
               "type": "string"
+            },
+            "mentions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Mention"
+              }
             },
             "quotes": {
               "type": "array",
@@ -460,8 +510,97 @@
         }
       ]
     },
+    "Collaboration": {
+      "type": "object",
+      "properties": {
+        "mode_explicit": {
+          "type": "boolean"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reply_mode": {
+          "$ref": "#/$defs/ReplyMode"
+        }
+      },
+      "required": [
+        "reply_mode",
+        "mode_explicit",
+        "participants"
+      ]
+    },
     "Command": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "join_workspace"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/ReplyMode"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_reply_mode"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "after": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "backend": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "quotes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextQuote"
+              }
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "submit_message"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "text",
+            "backend"
+          ]
+        },
         {
           "type": "object",
           "properties": {
@@ -772,6 +911,12 @@
             "prompt": {
               "type": "string"
             },
+            "source_entry": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "status": {
               "$ref": "#/$defs/SessionStatus"
             },
@@ -874,6 +1019,12 @@
         },
         "id": {
           "type": "string"
+        },
+        "mentions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mention"
+          }
         },
         "quotes": {
           "type": "array",
@@ -1021,9 +1172,45 @@
         "role"
       ]
     },
+    "Mention": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MentionKind"
+        },
+        "label": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "label"
+      ]
+    },
+    "MentionKind": {
+      "type": "string",
+      "enum": [
+        "user",
+        "agent"
+      ]
+    },
     "Receipt": {
       "type": "object",
       "properties": {
+        "agent_reply": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentReplyOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "cursor": {
           "type": "integer",
           "format": "uint64",
@@ -1039,6 +1226,13 @@
       "enum": [
         "thread",
         "user"
+      ]
+    },
+    "ReplyMode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "mentions_only"
       ]
     },
     "Role": {
@@ -1063,6 +1257,14 @@
     "Snapshot": {
       "type": "object",
       "properties": {
+        "collaboration": {
+          "$ref": "#/$defs/Collaboration",
+          "default": {
+            "mode_explicit": false,
+            "participants": [],
+            "reply_mode": "auto"
+          }
+        },
         "cursor": {
           "type": "integer",
           "format": "uint64",

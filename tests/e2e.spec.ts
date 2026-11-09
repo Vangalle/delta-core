@@ -160,6 +160,13 @@ test("workspace references and user mentions insert through the same inline entr
   );
   await page.getByLabel("Private draft", { exact: true }).fill("@users");
   await page.getByRole("button", { name: "Mention Host", exact: true }).click();
-  await expect(page.locator("#flow .user-mention")).toHaveText("@Host");
+  await expect(
+    page
+      .getByRole("textbox", { name: "Private draft", exact: true })
+      .locator(".mention"),
+  ).toHaveText("@Host");
+  expect((await owner.snapshot(w.id)).entries).toHaveLength(1);
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await expect(page.locator(".published-text .mention")).toHaveText("@Host");
   await page.screenshot({ path: "test-results/workspace.png", fullPage: true });
 });

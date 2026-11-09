@@ -83,8 +83,29 @@ export class AgentView {
           client.command(workspace, { type: "abort_agent", id }).catch(report);
         }),
       );
+    if (content.source_entry) {
+      const source = node("a", "agent-source subtle", "View request");
+      source.href = `/?${new URLSearchParams({ workspace, entry: content.source_entry, fragment: "text" })}`;
+      source.addEventListener("click", (event) => {
+        if (
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.shiftKey &&
+          !event.altKey
+        ) {
+          event.preventDefault();
+          quoteNavigation.go({
+            workspace_id: workspace,
+            entry_id: content.source_entry!,
+            fragment: "text",
+          });
+        }
+      });
+      header.append(source);
+      this.requestCount = 1;
+    }
     this.element.append(header);
-    this.appendRequest(content.prompt);
+    if (!content.source_entry) this.appendRequest(content.prompt);
     this.update(content);
   }
   update(content: AgentContent): void {

@@ -56,6 +56,13 @@
         <header class="topbar">
           <span id="workspace-breadcrumb"></span>
           <div class="topbar-right">
+            <label class="reply-mode-control"
+              >Agent
+              <select id="reply-mode" aria-label="Agent replies">
+                <option value="mentions_only">Only @agent</option>
+                <option value="auto">Automatic replies</option>
+              </select>
+            </label>
             <span id="connection" data-testid="connection">Connecting</span
             ><span id="member-name"></span
             ><button id="sign-out" class="subtle">Leave</button>
@@ -94,6 +101,7 @@
               </div>
             </div>
             <p class="insert-hint">
+              <code>@agent</code> ask the agent <span>·</span>
               <code>@terminal</code> execute here <span>·</span>
               <code>@threads</code> reference a workspace <span>·</span>
               <code>@users</code> mention someone

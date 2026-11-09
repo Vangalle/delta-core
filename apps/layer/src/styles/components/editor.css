@@ -110,23 +110,6 @@
   text-align: left;
   background: #ffffff04;
 }
-.rich-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin: 0 0 12px;
-  padding: 4px 0;
-}
-.format-button {
-  padding: 4px 6px;
-  font-size: 10px;
-  color: var(--muted);
-}
-.format-button:hover,
-.format-button:focus-visible {
-  color: var(--ink);
-  background: #ffffff08;
-}
 .rich-editor .tiptap {
   position: relative;
   min-height: 100px;

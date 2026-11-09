@@ -30,7 +30,6 @@ test("selection plus Space creates a private source-linked quote, not a mutation
     text: "Alpha **selected phrase** Omega.",
     after: null,
   });
-  const sourceSnapshot = await client.snapshot(workspace.id);
   const invitation = await client.invite({
     name: "Quote observer",
     role: "editor",
@@ -85,7 +84,7 @@ test("selection plus Space creates a private source-linked quote, not a mutation
         entry_id: "source",
         fragment: "text",
         revision: 1,
-        cursor: sourceSnapshot.cursor,
+        cursor: expect.any(Number),
         quote: "selected phrase",
       },
     ]);

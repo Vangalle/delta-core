@@ -74,6 +74,35 @@ pub struct ContextQuote {
     pub quote: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReplyMode {
+    #[default]
+    Auto,
+    MentionsOnly,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct Collaboration {
+    pub reply_mode: ReplyMode,
+    pub mode_explicit: bool,
+    pub participants: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MentionKind {
+    User,
+    Agent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Mention {
+    pub kind: MentionKind,
+    pub target: String,
+    pub label: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Activity {
@@ -148,6 +177,8 @@ pub enum Content {
         status: SessionStatus,
         prompt: String,
         activities: Vec<Activity>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_entry: Option<String>,
     },
     Reference {
         kind: ReferenceKind,
@@ -164,11 +195,25 @@ pub struct Entry {
     pub content: Content,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quotes: Vec<ContextQuote>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mentions: Vec<Mention>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    JoinWorkspace,
+    SetReplyMode {
+        mode: ReplyMode,
+    },
+    SubmitMessage {
+        id: String,
+        text: String,
+        after: Option<String>,
+        backend: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        quotes: Vec<ContextQuote>,
+    },
     PublishText {
         id: String,
         base_revision: u64,
@@ -221,6 +266,13 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Change {
+    ParticipantJoined {
+        member: String,
+    },
+    ReplyModeChanged {
+        mode: ReplyMode,
+        explicit: bool,
+    },
     Inserted {
         entry: Entry,
         after: Option<String>,
@@ -232,6 +284,8 @@ pub enum Change {
         actor: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         quotes: Vec<ContextQuote>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        mentions: Vec<Mention>,
     },
     TerminalOutput {
         id: String,
@@ -264,6 +318,8 @@ pub struct Snapshot {
     pub workspace: WorkspaceInfo,
     pub cursor: u64,
     pub entries: Vec<Entry>,
+    #[serde(default)]
+    pub collaboration: Collaboration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -291,9 +347,19 @@ pub struct ApiError {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentReplyOutcome {
+    Queued,
+    PermissionRequired,
+    Failed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Receipt {
     pub cursor: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_reply: Option<AgentReplyOutcome>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

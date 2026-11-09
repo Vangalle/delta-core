@@ -4,8 +4,10 @@
 @import "./styles/components/document.css";
 @import "./styles/components/references.css";
 @import "./styles/components/editor.css";
+@import "./styles/components/math.css";
 @import "./styles/components/terminal.css";
 @import "./styles/components/agent.css";
 @import "./styles/components/mermaid.css";
 @import "./styles/components/overlays.css";
 @import "./styles/responsive.css";
+@import "./styles/components/identity.css";

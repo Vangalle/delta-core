@@ -50,6 +50,7 @@ struct State {
     terminals: HashMap<(String, String), Terminal>,
     agents: HashMap<(String, String), mpsc::Sender<AgentCommand>>,
     backends: HashMap<String, Arc<dyn AgentBackend>>,
+    default_reply_mode: ReplyMode,
 }
 
 fn quoted_context(quotes: &[ContextQuote]) -> String {
@@ -181,12 +182,41 @@ impl Service {
                 terminals: HashMap::new(),
                 agents: HashMap::new(),
                 backends,
+                default_reply_mode: ReplyMode::Auto,
             })),
             events,
             stopping,
             cwd: cwd.canonicalize().map_err(internal)?,
             shell: std::env::var("DELTA_SHELL").unwrap_or_else(|_| "/bin/sh".into()),
         })
+    }
+
+    pub async fn set_default_reply_mode(&self, mode: ReplyMode) -> Result<(), ServiceError> {
+        let mut state = self.state.lock().await;
+        let untouched = state
+            .workspaces
+            .iter()
+            .filter(|(id, workspace)| {
+                workspace.entries.is_empty()
+                    && workspace.collaboration.participants.is_empty()
+                    && !workspace.collaboration.mode_explicit
+                    && workspace.collaboration.reply_mode != mode
+                    && *state.cursors.get(*id).unwrap_or(&0) == 0
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        for id in untouched {
+            self.commit(
+                &mut state,
+                &id,
+                &[Change::ReplyModeChanged {
+                    mode,
+                    explicit: false,
+                }],
+            )?;
+        }
+        state.default_reply_mode = mode;
+        Ok(())
     }
 
     pub async fn register_backend(&self, id: String, backend: Arc<dyn AgentBackend>) {
@@ -270,6 +300,17 @@ impl Service {
             Workspace::new(info.id.clone(), info.title.clone()),
         );
         s.cursors.insert(info.id.clone(), 0);
+        if s.default_reply_mode != ReplyMode::Auto {
+            let mode = s.default_reply_mode;
+            self.commit(
+                &mut s,
+                &info.id,
+                &[Change::ReplyModeChanged {
+                    mode,
+                    explicit: false,
+                }],
+            )?;
+        }
         Ok(info)
     }
 
@@ -292,6 +333,7 @@ impl Service {
             workspace: workspace.info.clone(),
             cursor: *s.cursors.get(id).unwrap_or(&0),
             entries: workspace.entries.clone(),
+            collaboration: workspace.collaboration.clone(),
         })
     }
 
@@ -338,6 +380,27 @@ impl Service {
         command: Command,
     ) -> Result<Receipt, ServiceError> {
         let mut s = self.state.lock().await;
+        let submission = matches!(&command, Command::SubmitMessage { .. });
+        let explicit_request = match &command {
+            Command::SubmitMessage { text, backend, .. } => {
+                delta_kernel::parse_mentions(text, backend)
+                    .iter()
+                    .any(|mention| mention.kind == MentionKind::Agent && mention.target == *backend)
+            }
+            _ => false,
+        };
+        if let Command::SubmitMessage { text, backend, .. } = &command {
+            let members = s.journal.members().map_err(internal)?;
+            if delta_kernel::parse_mentions(text, backend)
+                .iter()
+                .any(|mention| {
+                    mention.kind == MentionKind::User
+                        && !members.iter().any(|member| member.id == mention.target)
+                })
+            {
+                return Err(ServiceError::NotFound);
+            }
+        }
         if let Command::InsertReference { kind, target, .. } = &command {
             let exists = match kind {
                 ReferenceKind::Thread => s.workspaces.contains_key(target),
@@ -358,7 +421,9 @@ impl Service {
             }
             _ => {}
         }
-        if let Command::PublishText { quotes, .. } | Command::PromptAgent { quotes, .. } = &command
+        if let Command::PublishText { quotes, .. }
+        | Command::PromptAgent { quotes, .. }
+        | Command::SubmitMessage { quotes, .. } = &command
         {
             delta_kernel::validate_quotes(quotes)?;
             for quote in quotes {
@@ -378,6 +443,26 @@ impl Service {
             .get(id)
             .ok_or(ServiceError::NotFound)?
             .decide(actor, command)?;
+        let submitted_agent = if submission {
+            match &decision.effect {
+                Some(Effect::PromptAgent { id, backend, .. }) => {
+                    if !s.backends.contains_key(backend) {
+                        return Err(ServiceError::Invalid);
+                    }
+                    Some(id.clone())
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let mut agent_reply = if submitted_agent.is_some() {
+            Some(AgentReplyOutcome::Queued)
+        } else if submission && explicit_request && !actor.role.can_execute() {
+            Some(AgentReplyOutcome::PermissionRequired)
+        } else {
+            None
+        };
         if let Some(Effect::RespondAgent { id: entry, .. }) = &decision.effect {
             let sender = s
                 .agents
@@ -514,7 +599,14 @@ impl Service {
                                     },
                                 }],
                             )?;
-                            return Err(ServiceError::Unavailable);
+                            return if submission {
+                                Ok(Receipt {
+                                    cursor: *s.cursors.get(id).unwrap_or(&0),
+                                    agent_reply: Some(AgentReplyOutcome::Failed),
+                                })
+                            } else {
+                                Err(ServiceError::Unavailable)
+                            };
                         }
                         Ok(mut connection) => {
                             s.agents.insert(key(&entry), connection.commands);
@@ -579,9 +671,17 @@ impl Service {
                     .map_err(|_| ServiceError::Unavailable)
             }
         };
-        result?;
+        if let Err(error) = result {
+            if let Some(agent) = submitted_agent {
+                agent_reply = Some(AgentReplyOutcome::Failed);
+                self.commit(&mut s, id, &[Change::AgentActivity { id: agent, activity: Activity::Failed { message: "Agent request could not be delivered; the human publication was preserved".into() } }])?;
+            } else {
+                return Err(error);
+            }
+        }
         Ok(Receipt {
             cursor: *s.cursors.get(id).unwrap_or(&0),
+            agent_reply,
         })
     }
 

@@ -21,6 +21,7 @@ for line in sys.stdin:
   if 'Interaction fixture' in c['message']:
    print(json.dumps({'type':'extension_ui_request','id':'fixture-confirm','method':'confirm','title':'Fixture confirmation','message':'A controller decision is required'}),flush=True)
    continue
+  answer = '## Formula result\\n\\nInline $E=mc^2$.\\n\\n$$\\n\\\\frac{a}{b}\\n$$' if 'Math fixture' in c['message'] else 'Fixture response, not model inference.'
   records=[
    {'type':'response','command':'prompt','success':True,'data':{'disposition':'started'}},
    {'type':'tool_execution_start','toolCallId':'fixture-call','toolName':'read','args':{'path':'fixture.txt'}},
@@ -28,7 +29,7 @@ for line in sys.stdin:
    {'type':'tool_execution_end','toolCallId':'fixture-call','toolName':'read','result':{'content':[{'type':'text','text':'authoritative fixture result'}]},'isError':False},
    {'type':'message_start','message':{'role':'assistant','content':[]}},
    {'type':'message_update','assistantMessageEvent':{'type':'text_delta','contentIndex':0,'delta':'Fixture response'}},
-   {'type':'message_end','message':{'role':'assistant','content':[{'type':'text','text':'Fixture response, not model inference.'}],'stopReason':'stop'}},
+   {'type':'message_end','message':{'role':'assistant','content':[{'type':'text','text':answer}],'stopReason':'stop'}},
    {'type':'agent_end','willRetry':False,'messages':[]},
    {'type':'agent_settled','aborted':False}
   ]
@@ -44,6 +45,7 @@ const child = spawn(resolve("target/debug/delta-host"), {
     DELTA_DATA: data,
     DELTA_CWD: cwd,
     DELTA_PI: fixture,
+    DELTA_DEFAULT_REPLY_MODE: "mentions_only",
     DELTA_LISTEN: "127.0.0.1:47832",
   },
   stdio: "inherit",

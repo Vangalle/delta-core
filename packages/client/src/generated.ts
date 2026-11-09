@@ -1,5 +1,20 @@
 export type Command =
   | {
+      type: "join_workspace";
+    }
+  | {
+      mode: ReplyMode;
+      type: "set_reply_mode";
+    }
+  | {
+      after?: string | null;
+      backend: string;
+      id: string;
+      quotes?: ContextQuote[];
+      text: string;
+      type: "submit_message";
+    }
+  | {
       after?: string | null;
       base_revision: number;
       id: string;
@@ -53,6 +68,7 @@ export type Command =
       response: InteractionResponse;
       type: "respond_agent";
     };
+export type ReplyMode = "auto" | "mentions_only";
 export type ReferenceKind = "thread" | "user";
 export type InteractionResponse =
   | {
@@ -68,6 +84,15 @@ export type InteractionResponse =
     };
 export type Change =
   | {
+      member: string;
+      type: "participant_joined";
+    }
+  | {
+      explicit: boolean;
+      mode: ReplyMode;
+      type: "reply_mode_changed";
+    }
+  | {
       after?: string | null;
       entry: Entry;
       type: "inserted";
@@ -75,6 +100,7 @@ export type Change =
   | {
       actor: string;
       id: string;
+      mentions?: Mention[];
       quotes?: ContextQuote[];
       revision: number;
       text: string;
@@ -111,6 +137,7 @@ export type Content =
       backend: string;
       controller: string;
       prompt: string;
+      source_entry?: string | null;
       status: SessionStatus;
       type: "agent";
     }
@@ -186,7 +213,9 @@ export type Activity =
       type: "backend";
     };
 export type InteractionKind = "confirm" | "select" | "input" | "editor";
+export type MentionKind = "user" | "agent";
 export type Role = "owner" | "executor" | "editor" | "viewer";
+export type AgentReplyOutcome = "queued" | "permission_required" | "failed";
 
 export interface Contract {
   backend: BackendInfo;
@@ -228,8 +257,14 @@ export interface Entry {
   author: string;
   content: Content;
   id: string;
+  mentions?: Mention[];
   quotes?: ContextQuote[];
   revision: number;
+}
+export interface Mention {
+  kind: MentionKind;
+  label: string;
+  target: string;
 }
 export interface Invitation {
   member: Member;
@@ -245,12 +280,19 @@ export interface InviteMember {
   role: Role;
 }
 export interface Receipt {
+  agent_reply?: AgentReplyOutcome | null;
   cursor: number;
 }
 export interface Snapshot {
+  collaboration?: Collaboration;
   cursor: number;
   entries: Entry[];
   workspace: WorkspaceInfo;
+}
+export interface Collaboration {
+  mode_explicit: boolean;
+  participants: string[];
+  reply_mode: ReplyMode;
 }
 export interface WorkspaceInfo {
   id: string;

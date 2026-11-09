@@ -24,6 +24,35 @@ async function server(handler: import("node:http").RequestListener) {
   };
 }
 
+test("collaboration events project into legacy snapshots and repeated joins do not duplicate humans", () => {
+  const snapshot: Snapshot = {
+    workspace: { id: "w", title: "Work" },
+    cursor: 0,
+    entries: [],
+  };
+  applyEvent(snapshot, {
+    sequence: 1,
+    change: { type: "participant_joined", member: "a" },
+  });
+  applyEvent(snapshot, {
+    sequence: 2,
+    change: { type: "participant_joined", member: "a" },
+  });
+  applyEvent(snapshot, {
+    sequence: 3,
+    change: {
+      type: "reply_mode_changed",
+      mode: "mentions_only",
+      explicit: false,
+    },
+  });
+  assert.deepEqual(snapshot.collaboration, {
+    reply_mode: "mentions_only",
+    mode_explicit: false,
+    participants: ["a"],
+  });
+});
+
 test("public event projection preserves document order and final session state", () => {
   const snapshot: Snapshot = {
     workspace: { id: "w", title: "Work" },

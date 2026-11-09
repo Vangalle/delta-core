@@ -1,5 +1,11 @@
 import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { Marked } from "marked";
+import { mathMarkdown, renderMath } from "./math.ts";
+import { mentionMarkdownExtension } from "./mentions.ts";
+const markdownParser = new Marked(
+  { gfm: true, breaks: true },
+  { extensions: [...mathMarkdown, mentionMarkdownExtension] },
+);
 import { node } from "./ui.ts";
 
 let renderer: Promise<(typeof import("mermaid"))["default"]> | undefined;
@@ -112,7 +118,7 @@ export class MarkdownView {
     for (const diagram of this.diagrams) diagram.dispose();
     this.diagrams = [];
     this.element.innerHTML = DOMPurify.sanitize(
-      marked.parse(markdown, { async: false, gfm: true, breaks: true }),
+      markdownParser.parse(markdown, { async: false }),
       {
         USE_PROFILES: { html: true },
         ALLOW_DATA_ATTR: false,
@@ -130,6 +136,7 @@ export class MarkdownView {
         FORBID_ATTR: ["style"],
       },
     );
+    renderMath(this.element);
     for (const link of this.element.querySelectorAll("a")) {
       link.setAttribute("rel", "noopener noreferrer");
     }

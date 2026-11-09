@@ -1,0 +1,42 @@
+.math-inline {
+  display: inline-block;
+  vertical-align: baseline;
+  max-width: 100%;
+}
+.math-block {
+  display: block;
+  margin: 16px 0;
+  overflow-x: auto;
+}
+.math-node {
+  cursor: text;
+}
+.math-node:hover {
+  outline: 1px solid var(--line);
+  outline-offset: 3px;
+}
+.math-block .katex-display {
+  margin: 0;
+}
+.math-source {
+  display: block;
+  width: min(560px, 100%);
+  min-height: 42px;
+  padding: 6px 8px;
+  font: 13px/1.6 var(--font-code);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  resize: vertical;
+}
+.math-error {
+  font: 13px/1.6 var(--font-code);
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mention {
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
+}

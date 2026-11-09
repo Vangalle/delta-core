@@ -1,39 +1,9 @@
 import type { ITerminalOptions } from "@xterm/xterm";
 
-export type EditorAction =
-  | "bold"
-  | "italic"
-  | "heading"
-  | "bulletList"
-  | "orderedList"
-  | "quote"
-  | "codeBlock"
-  | "mermaid"
-  | "table"
-  | "link";
-
-export const editorTools = [
-  { action: "bold", label: "Bold" },
-  { action: "italic", label: "Italic" },
-  { action: "heading", label: "Heading 2" },
-  { action: "bulletList", label: "Bullet list" },
-  { action: "orderedList", label: "Numbered list" },
-  { action: "quote", label: "Quote" },
-  { action: "codeBlock", label: "Code block" },
-  { action: "mermaid", label: "Insert Mermaid" },
-  { action: "table", label: "Table" },
-  { action: "link", label: "Link" },
-] as const satisfies ReadonlyArray<{ action: EditorAction; label: string }>;
-
 export const quoteLabels = {
   source: "Source",
   go: "Go to quote source",
   remove: "Remove quote",
-};
-
-export const editorModeLabels = {
-  source: "Markdown source",
-  rich: "Rich text",
 };
 
 export function terminalAppearance(): Pick<
