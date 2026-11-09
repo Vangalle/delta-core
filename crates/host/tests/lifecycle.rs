@@ -42,6 +42,7 @@ async fn start(service: &Service, owner: &Member, workspace: &str, prompt: &str)
                 backend: "test".into(),
                 prompt: prompt.into(),
                 after: None,
+                quotes: Vec::new(),
             },
         )
         .await

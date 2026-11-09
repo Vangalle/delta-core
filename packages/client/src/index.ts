@@ -188,6 +188,7 @@ export function applyEvent(snapshot: Snapshot, event: Event): void {
         e.content = { type: "text", text: c.text };
         e.revision = c.revision;
         e.author = c.actor;
+        e.quotes = structuredClone(c.quotes ?? []);
       } else if (c.type === "terminal_output" && e.content.type === "terminal")
         e.content.output.push(c.data);
       else if (

@@ -52,6 +52,16 @@ struct State {
     backends: HashMap<String, Arc<dyn AgentBackend>>,
 }
 
+fn quoted_context(quotes: &[ContextQuote]) -> String {
+    if quotes.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n\nQuoted excerpts (user-supplied snapshots with source anchors):\n{}",
+        serde_json::to_string(quotes).unwrap_or_default()
+    )
+}
+
 fn published_context(state: &State, id: &str, include_references: bool) -> String {
     let Some(workspace) = state.workspaces.get(id) else {
         return String::new();
@@ -60,7 +70,7 @@ fn published_context(state: &State, id: &str, include_references: bool) -> Strin
         .entries
         .iter()
         .filter_map(|entry| match &entry.content {
-            Content::Text { text } => Some(text.clone()),
+            Content::Text { text } => Some(format!("{text}{}", quoted_context(&entry.quotes))),
             Content::Agent { activities, .. } => Some(
                 activities
                     .iter()
@@ -348,6 +358,21 @@ impl Service {
             }
             _ => {}
         }
+        if let Command::PublishText { quotes, .. } | Command::PromptAgent { quotes, .. } = &command
+        {
+            delta_kernel::validate_quotes(quotes)?;
+            for quote in quotes {
+                let source = s
+                    .workspaces
+                    .get(&quote.workspace_id)
+                    .ok_or(ServiceError::NotFound)?;
+                delta_kernel::validate_quote_source(
+                    source,
+                    *s.cursors.get(&quote.workspace_id).unwrap_or(&0),
+                    quote,
+                )?;
+            }
+        }
         let decision = s
             .workspaces
             .get(id)
@@ -469,6 +494,7 @@ impl Service {
                 id: entry,
                 backend,
                 prompt,
+                quotes,
             }) => {
                 if !s.agents.contains_key(&key(&entry)) {
                     let connection = s
@@ -542,8 +568,9 @@ impl Service {
                     }
                 }
                 let published = published_context(&s, id, true);
+                let quoted = quoted_context(&quotes);
                 let message = format!(
-                    "Published workspace content (reference material):\n<workspace>\n{published}\n</workspace>\n\nUser request:\n{prompt}"
+                    "Published workspace content (reference material):\n<workspace>\n{published}\n</workspace>\n\nUser request:\n{prompt}{quoted}"
                 );
                 s.agents
                     .get(&key(&entry))

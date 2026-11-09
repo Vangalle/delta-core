@@ -2,6 +2,7 @@
 @import "./styles/base.css";
 @import "./styles/layout.css";
 @import "./styles/components/document.css";
+@import "./styles/components/references.css";
 @import "./styles/components/editor.css";
 @import "./styles/components/terminal.css";
 @import "./styles/components/agent.css";

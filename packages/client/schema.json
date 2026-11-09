@@ -116,6 +116,12 @@
             "actor": {
               "type": "string"
             },
+            "quotes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextQuote"
+              }
+            },
             "text": {
               "type": "string"
             },
@@ -365,6 +371,12 @@
             "id": {
               "type": "string"
             },
+            "quotes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextQuote"
+              }
+            },
             "revision": {
               "type": "integer",
               "format": "uint64",
@@ -466,6 +478,12 @@
             },
             "id": {
               "type": "string"
+            },
+            "quotes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextQuote"
+              }
             },
             "text": {
               "type": "string"
@@ -627,6 +645,12 @@
             },
             "prompt": {
               "type": "string"
+            },
+            "quotes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextQuote"
+              }
             },
             "type": {
               "type": "string",
@@ -791,6 +815,42 @@
         }
       ]
     },
+    "ContextQuote": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "fragment": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "workspace_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "entry_id",
+        "fragment",
+        "revision",
+        "cursor",
+        "quote"
+      ]
+    },
     "CreateWorkspace": {
       "type": "object",
       "properties": {
@@ -814,6 +874,12 @@
         },
         "id": {
           "type": "string"
+        },
+        "quotes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextQuote"
+          }
         },
         "revision": {
           "type": "integer",

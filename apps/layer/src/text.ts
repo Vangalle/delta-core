@@ -3,12 +3,13 @@ import {
   type DeltaClient,
   type Entry,
   type Member,
+  type ContextQuote,
 } from "@delta-core/client";
 import { node, button } from "./ui.ts";
 import { RichEditor } from "./editor.ts";
 import { MarkdownView } from "./content.ts";
 
-type Draft = { text: string; base: number };
+type Draft = { text: string; base: number; quotes?: ContextQuote[] };
 export class TextView {
   element = node("section", "text-entry");
   private display = node("div", "published-text");
@@ -27,6 +28,7 @@ export class TextView {
     insertAfter: () => void,
   ) {
     this.entry = entry;
+    this.display.dataset.quoteFragment = "text";
     const key = `delta:draft:${me.id}:${workspace}:${entry.id}`;
     const saved = localStorage.getItem(key);
     this.draft = saved ? (JSON.parse(saved) as Draft) : null;
@@ -57,6 +59,7 @@ export class TextView {
           text:
             this.entry.content.type === "text" ? this.entry.content.text : "",
           base: this.entry.revision,
+          quotes: structuredClone(this.entry.quotes ?? []),
         };
         persist();
         show();
@@ -75,6 +78,7 @@ export class TextView {
           base_revision: submitted.base,
           text: submitted.text,
           after: null,
+          quotes: submitted.quotes ?? this.entry.quotes ?? [],
         });
         if (this.draft?.text === submitted.text) {
           this.draft = null;

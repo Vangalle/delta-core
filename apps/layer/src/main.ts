@@ -7,12 +7,21 @@ import {
   type Snapshot,
   type WorkspaceInfo,
   type Role,
+  type ContextQuote,
 } from "@delta-core/client";
 import { TerminalView } from "./terminal.ts";
 import { AgentView } from "./agent.ts";
 import { TextView } from "./text.ts";
 import { node, button, get } from "./ui.ts";
 import { RichEditor } from "./editor.ts";
+import {
+  ContextQuotes,
+  quoteKey,
+  quoteHref,
+  type QuoteLocator,
+  type QuoteNavigation,
+} from "./context-quotes.ts";
+import { SelectionQuotes } from "./selection.ts";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 
@@ -37,7 +46,29 @@ let navigation = 0;
 let after: string | null = null;
 let busy = false;
 let choices: Array<{ label: string; action: () => void }> = [];
-let savedQuote = "";
+const quoteNavigation: QuoteNavigation = {
+  title: (id) =>
+    workspaces.find((workspace) => workspace.id === id)?.title ?? id,
+  go: (quote) => {
+    void navigateQuote(quote).catch(report);
+  },
+};
+const quoteTray = new ContextQuotes(quoteNavigation, () => saveDraft());
+quoteTray.element.classList.add("draft-quotes");
+compose.prepend(quoteTray.element);
+const selectionQuotes = new SelectionQuotes(
+  flow,
+  () =>
+    snapshot && me
+      ? {
+          workspace: snapshot.workspace.id,
+          cursor: snapshot.cursor,
+          entries: snapshot.entries,
+          editable: me.role !== "viewer",
+        }
+      : null,
+  addQuote,
+);
 const views = new Map<
   string,
   { element: HTMLElement; update: (entry: Entry) => void; dispose: () => void }
@@ -59,7 +90,7 @@ function saveDraft(): void {
   try {
     localStorage.setItem(
       draftKey(),
-      JSON.stringify({ text: draft.value, after }),
+      JSON.stringify({ text: draft.value, after, quotes: quoteTray.value }),
     );
   } catch {
     report(
@@ -84,6 +115,37 @@ function selectPosition(id: string): void {
     return;
   }
   draft.focus();
+}
+
+function addQuote(quote: ContextQuote): void {
+  if (me.role === "viewer") return;
+  try {
+    quoteTray.add(quote);
+    saveDraft();
+    draft.focus();
+  } catch (error) {
+    report(error);
+  }
+}
+
+async function navigateQuote(quote: QuoteLocator): Promise<void> {
+  if (snapshot.workspace.id !== quote.workspace_id)
+    await openWorkspace(quote.workspace_id);
+  const view = views.get(quote.entry_id);
+  if (!view) throw new Error("Quote source is no longer available");
+  const target =
+    [
+      ...view.element.querySelectorAll<HTMLElement>("[data-quote-fragment]"),
+    ].find((element) => element.dataset.quoteFragment === quote.fragment) ??
+    view.element;
+  const disclosure = target.closest("details");
+  if (disclosure) disclosure.open = true;
+  target.tabIndex = -1;
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "center" });
+  target.classList.add("quote-target");
+  setTimeout(() => target.classList.remove("quote-target"), 1500);
+  history.replaceState(null, "", quoteHref(quote));
 }
 
 function editAgentResult(id: string, markdown: string): void {
@@ -120,6 +182,22 @@ function renderEntries(): void {
           snapshot.workspace.id,
           report,
           () => selectPosition(entry.id),
+          (text) => {
+            if (me.role === "viewer") return false;
+            const source = snapshot.entries.find(
+              (item) => item.id === entry.id,
+            );
+            if (!source) return false;
+            addQuote({
+              workspace_id: snapshot.workspace.id,
+              entry_id: source.id,
+              revision: source.revision,
+              cursor: snapshot.cursor,
+              fragment: "terminal",
+              quote: text,
+            });
+            return true;
+          },
         );
         view = {
           element: terminal.element,
@@ -137,6 +215,7 @@ function renderEntries(): void {
           snapshot.workspace.id,
           report,
           (markdown) => editAgentResult(entry.id, markdown),
+          quoteNavigation,
         );
         view = {
           element: agent.element,
@@ -161,6 +240,19 @@ function renderEntries(): void {
           );
         view = { element, update: () => {}, dispose: () => {} };
       }
+      const contentView = view;
+      const references = new ContextQuotes(quoteNavigation);
+      references.element.classList.add("published-quotes");
+      contentView.element.prepend(references.element);
+      contentView.element.dataset.entryId = entry.id;
+      view = {
+        element: contentView.element,
+        update: (value) => {
+          contentView.update(value);
+          references.value = value.quotes ?? [];
+        },
+        dispose: () => contentView.dispose(),
+      };
       views.set(entry.id, view);
       const next = snapshot.entries
         .slice(index + 1)
@@ -183,6 +275,7 @@ async function openWorkspace(id: string): Promise<void> {
   const next = await client.snapshot(id);
   if (generation !== navigation) return;
   subscription?.abort();
+  selectionQuotes.reset();
   for (const view of views.values()) view.dispose();
   views.clear();
   flow.replaceChildren();
@@ -191,9 +284,14 @@ async function openWorkspace(id: string): Promise<void> {
   get("workspace-breadcrumb").textContent = snapshot.workspace.title;
   const saved = localStorage.getItem(draftKey());
   const restored = saved
-    ? (JSON.parse(saved) as { text: string; after: string | null })
+    ? (JSON.parse(saved) as {
+        text: string;
+        after: string | null;
+        quotes?: ContextQuote[];
+      })
     : null;
   draft.reset(restored?.text ?? "");
+  quoteTray.value = restored?.quotes ?? [];
   after = restored?.after ?? null;
   if (after && !snapshot.entries.some((e) => e.id === after)) after = null;
   history.replaceState(null, "", `/?workspace=${encodeURIComponent(id)}`);
@@ -257,10 +355,18 @@ async function connect(token: string): Promise<void> {
   get<HTMLButtonElement>("new-workspace").disabled = me.role === "viewer";
   compose.hidden = me.role === "viewer";
   ask.hidden = me.role !== "owner" && me.role !== "executor";
-  const requested = new URL(location.href).searchParams.get("workspace");
+  const requested = new URL(location.href).searchParams;
   await openWorkspace(
-    workspaces.find((w) => w.id === requested)?.id ?? workspaces[0].id,
+    workspaces.find((w) => w.id === requested.get("workspace"))?.id ??
+      workspaces[0].id,
   );
+  const source = requested.get("entry");
+  if (source && requested.get("workspace") === snapshot.workspace.id)
+    await navigateQuote({
+      workspace_id: snapshot.workspace.id,
+      entry_id: source,
+      fragment: requested.get("fragment") ?? "text",
+    });
 }
 
 async function act(action: () => Promise<void>): Promise<void> {
@@ -285,11 +391,29 @@ function completeDraft(
   original: string,
   id: string,
   remaining: string,
+  submittedQuotes: ContextQuote[] = [],
 ): void {
+  const sent = new Set(submittedQuotes.map(quoteKey));
+  const retained = (quotes: ContextQuote[]) =>
+    quotes.filter((quote) => !sent.has(quoteKey(quote)));
   const stored = localStorage.getItem(key);
-  if (stored && (JSON.parse(stored) as { text: string }).text === original)
-    localStorage.setItem(key, JSON.stringify({ text: remaining, after: id }));
+  if (stored) {
+    const saved = JSON.parse(stored) as {
+      text: string;
+      after: string | null;
+      quotes?: ContextQuote[];
+    };
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        text: saved.text === original ? remaining : saved.text,
+        after: id,
+        quotes: retained(saved.quotes ?? []),
+      }),
+    );
+  }
   if (generation !== navigation) return;
+  quoteTray.value = retained(quoteTray.value);
   after = id;
   if (draft.value === original) draft.value = remaining;
   saveDraft();
@@ -385,7 +509,8 @@ function updatePalette(): void {
 
 publish.addEventListener("click", () => {
   void act(async () => {
-    if (!draft.value.trim()) return;
+    const quotes = quoteTray.value;
+    if (!draft.value.trim() && !quotes.length) return;
     const text = draft.value;
     const id = crypto.randomUUID();
     const generation = navigation;
@@ -396,8 +521,9 @@ publish.addEventListener("click", () => {
       base_revision: 0,
       text,
       after,
+      quotes,
     });
-    completeDraft(generation, key, text, id, "");
+    completeDraft(generation, key, text, id, "", quotes);
   });
 });
 ask.addEventListener("click", () => {
@@ -407,14 +533,16 @@ ask.addEventListener("click", () => {
     const id = crypto.randomUUID();
     const generation = navigation;
     const key = draftKey();
+    const quotes = quoteTray.value;
     await client.command(snapshot.workspace.id, {
       type: "prompt_agent",
       id,
       backend: "pi",
       prompt: text,
       after,
+      quotes,
     });
-    completeDraft(generation, key, text, id, "");
+    completeDraft(generation, key, text, id, "", quotes);
   });
 });
 draft.onChange = () => {
@@ -437,25 +565,9 @@ draft.onKeyDown = (event) => {
   }
   return false;
 };
-document.addEventListener("selectionchange", () => {
-  const selection = window.getSelection();
-  if (
-    selection?.toString() &&
-    selection.anchorNode?.parentElement?.closest("#flow")
-  )
-    savedQuote = selection.toString();
-});
 get("quote").addEventListener("click", () => {
-  if (!savedQuote) {
+  if (!selectionQuotes.quoteSelection())
     report(new Error("Select published workspace text first"));
-    return;
-  }
-  draft.value += `${draft.value ? "\n\n" : ""}${savedQuote
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n")}\n`;
-  saveDraft();
-  draft.focus();
 });
 get("new-workspace").addEventListener("click", () => {
   const title = window.prompt("Workspace name");

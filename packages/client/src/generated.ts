@@ -3,6 +3,7 @@ export type Command =
       after?: string | null;
       base_revision: number;
       id: string;
+      quotes?: ContextQuote[];
       text: string;
       type: "publish_text";
     }
@@ -39,6 +40,7 @@ export type Command =
       backend: string;
       id: string;
       prompt: string;
+      quotes?: ContextQuote[];
       type: "prompt_agent";
     }
   | {
@@ -73,6 +75,7 @@ export type Change =
   | {
       actor: string;
       id: string;
+      quotes?: ContextQuote[];
       revision: number;
       text: string;
       type: "text_published";
@@ -134,6 +137,7 @@ export type Activity =
     }
   | {
       actor: string;
+      quotes?: ContextQuote[];
       text: string;
       type: "prompt";
     }
@@ -201,6 +205,14 @@ export interface BackendInfo {
   id: string;
   label: string;
 }
+export interface ContextQuote {
+  cursor: number;
+  entry_id: string;
+  fragment: string;
+  quote: string;
+  revision: number;
+  workspace_id: string;
+}
 export interface CreateWorkspace {
   title: string;
 }
@@ -216,6 +228,7 @@ export interface Entry {
   author: string;
   content: Content;
   id: string;
+  quotes?: ContextQuote[];
   revision: number;
 }
 export interface Invitation {

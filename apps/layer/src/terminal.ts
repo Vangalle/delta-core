@@ -1,4 +1,5 @@
 import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
 import type { Content, DeltaClient, Member } from "@delta-core/client";
 import { node, button } from "./ui.ts";
 import { terminalAppearance } from "./presentation.ts";
@@ -27,6 +28,7 @@ export class TerminalView {
     workspace: string,
     report: (error: unknown) => void,
     returnToDocument: () => void,
+    quoteSelection: (text: string) => boolean,
   ) {
     this.canControl =
       content.controller === me.id &&
@@ -51,6 +53,9 @@ export class TerminalView {
     else
       this.permission.textContent = `Read only · controlled by ${names.get(content.controller) ?? content.controller}`;
     const surface = node("div", "terminal-surface");
+    surface.dataset.quoteFragment = "terminal";
+    const display = node("div", "terminal-display");
+    surface.append(display);
     this.transcript.dataset.testid = "terminal-transcript";
     this.element.append(header, surface, this.transcript);
     this.terminal = new Terminal({
@@ -61,9 +66,29 @@ export class TerminalView {
       scrollback: 10000,
       ...terminalAppearance(),
     });
-    this.terminal.open(surface);
+    const fitAddon = new FitAddon();
+    this.terminal.loadAddon(fitAddon);
+    this.terminal.open(display);
     this.terminal.textarea?.setAttribute("aria-label", "Terminal input");
     this.terminal.attachCustomKeyEventHandler((event) => {
+      if (
+        event.type === "keydown" &&
+        event.key === " " &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.isComposing &&
+        !event.repeat
+      ) {
+        const selected = this.terminal.getSelection().trim();
+        if (selected && quoteSelection(selected)) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.terminal.clearSelection();
+          return false;
+        }
+      }
       if (event.key !== "Escape") return true;
       event.preventDefault();
       event.stopPropagation();
@@ -75,10 +100,9 @@ export class TerminalView {
     });
     const fit = () => {
       if (this.disposed || !this.element.isConnected) return;
-      const cols = Math.max(
-        20,
-        Math.min(180, Math.floor((surface.clientWidth - 20) / 7.85)),
-      );
+      const dimensions = fitAddon.proposeDimensions();
+      if (!dimensions || !Number.isFinite(dimensions.cols)) return;
+      const cols = Math.max(2, Math.min(180, dimensions.cols));
       if (cols !== this.cols) {
         this.cols = cols;
         this.terminal.resize(cols, this.rows);
@@ -89,6 +113,7 @@ export class TerminalView {
     this.resize = new ResizeObserver(fit);
     this.resize.observe(surface);
     this.terminal.onWriteParsed(() => {
+      fit();
       const needed = Math.min(
         200,
         Math.max(

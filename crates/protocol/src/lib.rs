@@ -63,6 +63,17 @@ pub enum InteractionResponse {
     Cancel,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ContextQuote {
+    pub workspace_id: String,
+    pub entry_id: String,
+    pub fragment: String,
+    pub revision: u64,
+    pub cursor: u64,
+    pub quote: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Activity {
@@ -80,6 +91,8 @@ pub enum Activity {
     Prompt {
         text: String,
         actor: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        quotes: Vec<ContextQuote>,
     },
     MessageStart {
         message_id: String,
@@ -149,6 +162,8 @@ pub struct Entry {
     pub revision: u64,
     pub author: String,
     pub content: Content,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quotes: Vec<ContextQuote>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -159,6 +174,8 @@ pub enum Command {
         base_revision: u64,
         text: String,
         after: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        quotes: Vec<ContextQuote>,
     },
     InsertReference {
         id: String,
@@ -188,6 +205,8 @@ pub enum Command {
         backend: String,
         prompt: String,
         after: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        quotes: Vec<ContextQuote>,
     },
     AbortAgent {
         id: String,
@@ -211,6 +230,8 @@ pub enum Change {
         revision: u64,
         text: String,
         actor: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        quotes: Vec<ContextQuote>,
     },
     TerminalOutput {
         id: String,

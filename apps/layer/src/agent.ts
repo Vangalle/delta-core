@@ -3,10 +3,12 @@ import type {
   DeltaClient,
   Member,
   InteractionResponse,
+  ContextQuote,
 } from "@delta-core/client";
 import { node, button } from "./ui.ts";
 import { MarkdownView } from "./content.ts";
 import { InteractionView } from "./interaction.ts";
+import { ContextQuotes, type QuoteNavigation } from "./context-quotes.ts";
 
 type AgentContent = Extract<Content, { type: "agent" }>;
 export class AgentView {
@@ -27,6 +29,7 @@ export class AgentView {
     }
   >();
   private requests: MarkdownView[] = [];
+  private requestCount = 0;
   private editResult: ((markdown: string) => void) | undefined;
   private interactions = new Map<string, InteractionView>();
   private controller = false;
@@ -47,6 +50,7 @@ export class AgentView {
     workspace: string,
     report: (error: unknown) => void,
     editResult: (markdown: string) => void,
+    private quoteNavigation: QuoteNavigation,
   ) {
     this.editResult = me.role === "viewer" ? undefined : editResult;
     this.controller =
@@ -101,9 +105,10 @@ export class AgentView {
       } else if (activity.type === "interaction_resolved") {
         this.interactions.get(activity.request_id)?.resolve();
       } else if (activity.type === "prompt") {
-        this.appendRequest(activity.text);
+        this.appendRequest(activity.text, activity.quotes ?? []);
       } else if (activity.type === "message_start") {
         const element = node("div", "agent-message");
+        element.dataset.quoteFragment = `message:${activity.message_id}`;
         this.messages.set(activity.message_id, {
           element,
           blocks: new Map(),
@@ -117,6 +122,7 @@ export class AgentView {
         let message = this.messages.get(activity.message_id);
         if (!message) {
           const element = node("div", "agent-message");
+          element.dataset.quoteFragment = `message:${activity.message_id}`;
           message = {
             element,
             blocks: new Map(),
@@ -157,6 +163,7 @@ export class AgentView {
           JSON.stringify(activity.args, null, 2),
         );
         const output = node("pre", "tool-output");
+        output.dataset.quoteFragment = `tool:${activity.call_id}`;
         details.append(summary, args, output);
         this.element.append(details);
         this.tools.set(activity.call_id, {
@@ -205,12 +212,19 @@ export class AgentView {
     for (const view of this.interactions.values())
       view.setAvailable(content.status === "running");
   }
-  private appendRequest(text: string): void {
+  private appendRequest(text: string, quotes: ContextQuote[] = []): void {
     const element = node("div", "agent-request");
+    element.dataset.quoteFragment = `prompt:${this.requestCount++}`;
     const view = new MarkdownView(element);
     view.setContent(text);
     this.requests.push(view);
     this.element.append(element);
+    if (quotes.length) {
+      const context = new ContextQuotes(this.quoteNavigation);
+      context.element.classList.add("published-quotes");
+      context.value = quotes;
+      this.element.append(context.element);
+    }
   }
   dispose(): void {
     for (const message of this.messages.values()) message.renderer.dispose();

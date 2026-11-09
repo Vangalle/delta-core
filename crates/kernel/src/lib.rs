@@ -1,4 +1,6 @@
 use delta_protocol::*;
+mod context;
+pub use context::{validate_quote_source, validate_quotes};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum KernelError {
@@ -35,6 +37,7 @@ pub enum Effect {
         id: String,
         backend: String,
         prompt: String,
+        quotes: Vec<ContextQuote>,
     },
     AbortAgent {
         id: String,
@@ -79,6 +82,7 @@ impl Workspace {
         id: String,
         after: Option<String>,
         content: Content,
+        quotes: Vec<ContextQuote>,
     ) -> Result<Decision, KernelError> {
         if id.is_empty() || id.len() > 128 || id.chars().any(char::is_control) {
             return Err(KernelError::Invalid);
@@ -96,6 +100,7 @@ impl Workspace {
                     revision: 1,
                     author: actor.id.clone(),
                     content,
+                    quotes,
                 },
                 after,
             }],
@@ -141,12 +146,19 @@ impl Workspace {
         if !actor.role.can_edit() {
             return Err(KernelError::Forbidden);
         }
+        match &command {
+            Command::PublishText { quotes, .. } | Command::PromptAgent { quotes, .. } => {
+                validate_quotes(quotes)?
+            }
+            _ => {}
+        }
         match command {
             Command::PublishText {
                 id,
                 base_revision,
                 text,
                 after,
+                quotes,
             } => {
                 if text.len() > 262_144 {
                     return Err(KernelError::Invalid);
@@ -164,6 +176,7 @@ impl Workspace {
                             revision: base_revision + 1,
                             text,
                             actor: actor.id.clone(),
+                            quotes,
                         }],
                         effect: None,
                     })
@@ -171,7 +184,7 @@ impl Workspace {
                     if base_revision != 0 {
                         return Err(KernelError::Conflict);
                     }
-                    self.insert(actor, id, after, Content::Text { text })
+                    self.insert(actor, id, after, Content::Text { text }, quotes)
                 }
             }
             Command::InsertReference {
@@ -193,6 +206,7 @@ impl Workspace {
                         target,
                         label,
                     },
+                    Vec::new(),
                 )
             }
             Command::OpenTerminal { id, after } => {
@@ -208,6 +222,7 @@ impl Workspace {
                         status: SessionStatus::Running,
                         output: Vec::new(),
                     },
+                    Vec::new(),
                 )?;
                 d.effect = Some(Effect::OpenTerminal { id });
                 Ok(d)
@@ -244,6 +259,7 @@ impl Workspace {
                 backend,
                 prompt,
                 after,
+                quotes,
             } => {
                 if !actor.role.can_execute() {
                     return Err(KernelError::Forbidden);
@@ -268,6 +284,7 @@ impl Workspace {
                                 activity: Activity::Prompt {
                                     text: prompt.clone(),
                                     actor: actor.id.clone(),
+                                    quotes: quotes.clone(),
                                 },
                             },
                             Change::SessionState {
@@ -289,12 +306,14 @@ impl Workspace {
                             prompt: prompt.clone(),
                             activities: Vec::new(),
                         },
+                        quotes.clone(),
                     )?
                 };
                 d.effect = Some(Effect::PromptAgent {
                     id,
                     backend,
                     prompt,
+                    quotes,
                 });
                 Ok(d)
             }
@@ -380,11 +399,13 @@ impl Workspace {
                 revision,
                 text,
                 actor,
+                quotes,
             } => {
                 if let Some(e) = self.entries.iter_mut().find(|e| e.id == id) {
                     e.revision = revision;
                     e.author = actor;
                     e.content = Content::Text { text };
+                    e.quotes = quotes;
                 }
             }
             Change::TerminalOutput { id, data } => {

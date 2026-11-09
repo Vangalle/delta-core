@@ -23,6 +23,7 @@ fn publish(
             base_revision,
             text: text.into(),
             after: after.map(str::to_owned),
+            quotes: Vec::new(),
         },
     )?;
     for c in d.changes {
@@ -71,6 +72,7 @@ fn drafts_are_not_shared_until_an_explicit_command_is_applied() {
                 base_revision: 0,
                 text: "private".into(),
                 after: None,
+                quotes: Vec::new(),
             },
         )
         .unwrap();
@@ -119,6 +121,7 @@ fn viewer_cannot_publish_and_invalid_commands_cannot_create_entries() {
         base_revision: 0,
         text: "text".into(),
         after: None,
+        quotes: Vec::new(),
     };
     assert_eq!(
         w.decide(&member("viewer", Role::Viewer), p).unwrap_err(),
@@ -148,6 +151,7 @@ fn structured_tool_results_remain_attached_to_the_agent_entry() {
                 backend: "other".into(),
                 prompt: "test".into(),
                 after: None,
+                quotes: Vec::new(),
             },
         )
         .unwrap();

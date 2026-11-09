@@ -17,6 +17,7 @@ fn pending() -> Workspace {
                 backend: "pi".into(),
                 prompt: "request".into(),
                 after: None,
+                quotes: Vec::new(),
             },
         )
         .unwrap();

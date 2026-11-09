@@ -52,6 +52,7 @@ async fn non_pi_backend_uses_the_same_kernel_and_receives_published_context() {
                 base_revision: 0,
                 text: "shared material".into(),
                 after: None,
+                quotes: Vec::new(),
             },
         )
         .await
@@ -69,6 +70,7 @@ async fn non_pi_backend_uses_the_same_kernel_and_receives_published_context() {
                 base_revision: 0,
                 text: "referenced material".into(),
                 after: None,
+                quotes: Vec::new(),
             },
         )
         .await
@@ -96,6 +98,7 @@ async fn non_pi_backend_uses_the_same_kernel_and_receives_published_context() {
                 backend: "alternative".into(),
                 prompt: "Use the shared context".into(),
                 after: None,
+                quotes: Vec::new(),
             },
         )
         .await

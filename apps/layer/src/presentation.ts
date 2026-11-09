@@ -25,6 +25,12 @@ export const editorTools = [
   { action: "link", label: "Link" },
 ] as const satisfies ReadonlyArray<{ action: EditorAction; label: string }>;
 
+export const quoteLabels = {
+  source: "Source",
+  go: "Go to quote source",
+  remove: "Remove quote",
+};
+
 export const editorModeLabels = {
   source: "Markdown source",
   rich: "Rich text",

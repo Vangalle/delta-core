@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "start": "npm run build && cargo run -p delta-host",
+    "ui:watch": "npm run build -w @delta-core/layer -- --watch",
     "generate": "node scripts/schema.mjs",
     "test": "node --experimental-strip-types --test packages/client/tests/*.test.ts",
     "typecheck": "tsc --noEmit",
