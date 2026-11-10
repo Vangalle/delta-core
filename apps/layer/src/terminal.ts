@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import type { Content, DeltaClient, Member } from "@delta-core/client";
 import { node, button } from "./ui.ts";
+import { onThemeChange } from "./theme.ts";
 import { terminalAppearance } from "./presentation.ts";
 
 type TerminalContent = Extract<Content, { type: "terminal" }>;
@@ -19,6 +20,7 @@ export class TerminalView {
   private rows = 12;
   private cols = 100;
   private canControl: boolean;
+  private unwatchTheme: () => void = () => {};
   constructor(
     content: TerminalContent,
     id: string,
@@ -42,7 +44,7 @@ export class TerminalView {
     };
     const header = node("div", "execution-header");
     header.append(
-      node("span", "execution-label", "Terminal"),
+      node("span", "execution-label", "Host terminal · Experimental"),
       this.state,
       this.permission,
     );
@@ -65,6 +67,9 @@ export class TerminalView {
       disableStdin: !this.canControl,
       scrollback: 10000,
       ...terminalAppearance(),
+    });
+    this.unwatchTheme = onThemeChange(() => {
+      this.terminal.options.theme = terminalAppearance().theme;
     });
     const fitAddon = new FitAddon();
     this.terminal.loadAddon(fitAddon);
@@ -153,6 +158,7 @@ export class TerminalView {
   dispose(): void {
     this.disposed = true;
     this.resize.disconnect();
+    this.unwatchTheme();
     this.terminal.dispose();
   }
 }

@@ -45,8 +45,14 @@
     "member": {
       "$ref": "#/$defs/Member"
     },
+    "open_desktop_terminal": {
+      "$ref": "#/$defs/OpenDesktopTerminal"
+    },
     "receipt": {
       "$ref": "#/$defs/Receipt"
+    },
+    "set_member_role": {
+      "$ref": "#/$defs/SetMemberRole"
     },
     "snapshot": {
       "$ref": "#/$defs/Snapshot"
@@ -66,6 +72,8 @@
     "friend",
     "friend_target",
     "add_friend",
+    "set_member_role",
+    "open_desktop_terminal",
     "command",
     "event",
     "snapshot",
@@ -429,6 +437,42 @@
     },
     "Change": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "desktop_terminal_opened"
+            }
+          },
+          "required": [
+            "type",
+            "actor"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "can_execute": {
+              "type": "boolean"
+            },
+            "member": {
+              "$ref": "#/$defs/Member"
+            },
+            "type": {
+              "type": "string",
+              "const": "member_role_changed"
+            }
+          },
+          "required": [
+            "type",
+            "member",
+            "can_execute"
+          ]
+        },
         {
           "type": "object",
           "properties": {
@@ -1384,8 +1428,13 @@
       "type": "string",
       "enum": [
         "user",
-        "agent"
+        "agent",
+        "thread"
       ]
+    },
+    "OpenDesktopTerminal": {
+      "type": "object",
+      "additionalProperties": false
     },
     "Person": {
       "type": "object",
@@ -1458,6 +1507,18 @@
         "failed"
       ]
     },
+    "SetMemberRole": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "role"
+      ]
+    },
     "Snapshot": {
       "type": "object",
       "properties": {
@@ -1470,6 +1531,12 @@
               "type": "null"
             }
           ]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "collaboration": {
           "$ref": "#/$defs/Collaboration",
@@ -1495,6 +1562,12 @@
           "items": {
             "$ref": "#/$defs/Member"
           }
+        },
+        "self_id": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "workspace": {
           "$ref": "#/$defs/WorkspaceInfo"

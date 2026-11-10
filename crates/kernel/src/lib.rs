@@ -1,6 +1,6 @@
 use delta_protocol::*;
 mod access;
-pub use access::workspace_access;
+pub use access::{member_role_change, workspace_access};
 mod collaboration;
 mod context;
 pub use collaboration::parse_mentions;
@@ -470,7 +470,9 @@ impl Workspace {
                 self.collaboration.reply_mode = mode;
                 self.collaboration.mode_explicit = explicit;
             }
-            Change::MemberAdded { .. } => {}
+            Change::MemberAdded { .. }
+            | Change::MemberRoleChanged { .. }
+            | Change::DesktopTerminalOpened { .. } => {}
             Change::OrderRestored { ids } => {
                 let positions = ids
                     .iter()

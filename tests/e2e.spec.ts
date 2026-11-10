@@ -170,9 +170,10 @@ test("workspace references and user mentions insert through the same inline entr
   await page
     .getByRole("button", { name: "Reference Workspace", exact: true })
     .click();
-  await expect(page.locator("#flow .workspace-reference")).toContainText(
-    "Workspace",
+  await expect(page.locator('#draft .mention[data-kind="thread"]')).toHaveText(
+    "@Workspace",
   );
+  expect((await owner.snapshot(w.id)).entries).toHaveLength(0);
   await page.getByLabel("Private draft", { exact: true }).fill("@users");
   await page.getByRole("button", { name: "Mention Host", exact: true }).click();
   await expect(
@@ -180,7 +181,7 @@ test("workspace references and user mentions insert through the same inline entr
       .getByRole("textbox", { name: "Private draft", exact: true })
       .locator(".mention"),
   ).toHaveText("@Host");
-  expect((await owner.snapshot(w.id)).entries).toHaveLength(1);
+  expect((await owner.snapshot(w.id)).entries).toHaveLength(0);
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.locator(".published-text .mention")).toHaveText("@Host");
   await page.screenshot({ path: "test-results/workspace.png", fullPage: true });

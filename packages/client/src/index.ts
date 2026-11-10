@@ -90,6 +90,24 @@ export class DeltaClient {
   acceptFriend(memberId: string): Promise<Friend[]> {
     return this.request("/friends/accept", "POST", { member_id: memberId });
   }
+  openDesktopTerminal(workspace: string): Promise<Receipt> {
+    return this.request(
+      `/workspaces/${encodeURIComponent(workspace)}/desktop-terminal`,
+      "POST",
+      {},
+    );
+  }
+  setMemberRole(
+    workspace: string,
+    memberId: string,
+    role: Role,
+  ): Promise<Receipt> {
+    return this.request(
+      `/workspaces/${encodeURIComponent(workspace)}/members/${encodeURIComponent(memberId)}/role`,
+      "POST",
+      { role },
+    );
+  }
   addFriend(
     workspace: string,
     memberId: string,
@@ -223,7 +241,17 @@ export class DeltaClient {
 export function applyEvent(snapshot: Snapshot, event: Event): void {
   if (event.sequence <= snapshot.cursor) return;
   const c = event.change;
-  if (c.type === "member_added") {
+  if (c.type === "desktop_terminal_opened") {
+  } else if (c.type === "member_role_changed") {
+    snapshot.members ??= [];
+    const index = snapshot.members.findIndex(
+      (member) => member.id === c.member.id,
+    );
+    if (index >= 0) snapshot.members[index] = c.member;
+    else snapshot.members.push(c.member);
+    if (snapshot.self_id === c.member.id)
+      snapshot.access = { role: c.member.role, can_execute: c.can_execute };
+  } else if (c.type === "member_added") {
     snapshot.members ??= [];
     if (!snapshot.members.some((member) => member.id === c.member.id))
       snapshot.members.push(c.member);

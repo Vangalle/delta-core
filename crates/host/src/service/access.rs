@@ -12,7 +12,12 @@ pub(super) fn authorize(
         .workspace_role(id, &actor.id)
         .map_err(internal)?
         .ok_or(ServiceError::NotFound)?;
-    Ok(delta_kernel::workspace_access(actor, role))
+    let canonical = s
+        .journal
+        .account(&actor.id)
+        .map_err(internal)?
+        .ok_or(ServiceError::Unauthorized)?;
+    Ok(delta_kernel::workspace_access(&canonical, role))
 }
 pub(super) fn shared_reference(s: &State, from: &str, to: &str) -> bool {
     s.journal.workspace_members(from).is_ok_and(|members| {
@@ -59,6 +64,162 @@ fn added_changes(
     Ok(changes)
 }
 impl Service {
+    pub async fn open_desktop_terminal(
+        &self,
+        actor: &Member,
+        id: &str,
+    ) -> Result<Receipt, ServiceError> {
+        {
+            let s = self.state.lock().await;
+            let access = authorize(&s, actor, id)?;
+            let canonical = s
+                .journal
+                .account(&actor.id)
+                .map_err(internal)?
+                .ok_or(ServiceError::Unauthorized)?;
+            if canonical.role != Role::Owner || !access.can_execute {
+                return Err(ServiceError::Forbidden);
+            }
+        }
+        let backend = self
+            .desktop_terminal
+            .as_ref()
+            .ok_or(ServiceError::Unavailable)?;
+        let mut command = backend
+            .command(&self.cwd)
+            .map_err(|_| ServiceError::Unavailable)?;
+        command
+            .kill_on_drop(true)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let status = tokio::time::timeout(std::time::Duration::from_secs(15), command.status())
+            .await
+            .map_err(|_| ServiceError::Unavailable)?
+            .map_err(|_| ServiceError::Unavailable)?;
+        if !status.success() {
+            return Err(ServiceError::Unavailable);
+        }
+        let mut s = self.state.lock().await;
+        let cursor = self.commit(
+            &mut s,
+            id,
+            &[Change::DesktopTerminalOpened {
+                actor: actor.id.clone(),
+            }],
+        )?;
+        Ok(Receipt {
+            cursor,
+            agent_reply: None,
+        })
+    }
+    pub async fn set_member_role(
+        &self,
+        actor: &Member,
+        id: &str,
+        target_id: &str,
+        body: SetMemberRole,
+    ) -> Result<Receipt, ServiceError> {
+        let mut s = self.state.lock().await;
+        let actor = s
+            .journal
+            .account(&actor.id)
+            .map_err(internal)?
+            .ok_or(ServiceError::Unauthorized)?;
+        let access = authorize(&s, &actor, id)?;
+        if access.role != Role::Owner {
+            return Err(ServiceError::Forbidden);
+        }
+        let mut target = s
+            .journal
+            .account(target_id)
+            .map_err(internal)?
+            .ok_or(ServiceError::NotFound)?;
+        let current = s
+            .journal
+            .workspace_role(id, target_id)
+            .map_err(internal)?
+            .ok_or(ServiceError::NotFound)?;
+        let old_host_role = target.role;
+        target.role =
+            delta_kernel::member_role_change(&actor, access, &target, current, body.role)?;
+        if current == body.role && old_host_role == target.role {
+            return Ok(Receipt {
+                cursor: *s.cursors.get(id).unwrap_or(&0),
+                agent_reply: None,
+            });
+        }
+        let mut changes = Vec::new();
+        let mut stop = Vec::new();
+        for info in s.journal.workspaces().map_err(internal)? {
+            if let Some(old_role) = s
+                .journal
+                .workspace_role(&info.id, target_id)
+                .map_err(internal)?
+            {
+                if info.id != id && old_host_role == target.role {
+                    continue;
+                }
+                let role = if info.id == id { body.role } else { old_role };
+                let effective = delta_kernel::workspace_access(&target, role);
+                let mut events = vec![Change::MemberRoleChanged {
+                    member: Member {
+                        id: target.id.clone(),
+                        name: target.name.clone(),
+                        role,
+                    },
+                    can_execute: effective.can_execute,
+                }];
+                if !effective.can_execute {
+                    for entry in &s.workspaces[&info.id].entries {
+                        let controlled = match &entry.content {
+                            Content::Terminal {
+                                controller, status, ..
+                            }
+                            | Content::Agent {
+                                controller, status, ..
+                            } => {
+                                controller == target_id
+                                    && matches!(
+                                        status,
+                                        SessionStatus::Running | SessionStatus::Idle
+                                    )
+                            }
+                            _ => false,
+                        };
+                        if controlled {
+                            stop.push((info.id.clone(), entry.id.clone()));
+                            events.push(Change::SessionState {
+                                id: entry.id.clone(),
+                                status: SessionStatus::Interrupted,
+                            });
+                        }
+                    }
+                }
+                changes.push((info.id, events));
+            }
+        }
+        let events = s
+            .journal
+            .set_member_role(id, &target, body.role, &changes)
+            .map_err(internal)?;
+        for key in stop {
+            if let Some(mut terminal) = s.terminals.remove(&key) {
+                let _ = terminal.close();
+            }
+            s.agents.remove(&key);
+            if let Some(reader) = s.agent_readers.remove(&key) {
+                reader.abort();
+            }
+        }
+        for (workspace, event) in events {
+            self.project_events(&mut s, &workspace, vec![event])?;
+        }
+        Ok(Receipt {
+            cursor: *s.cursors.get(id).unwrap_or(&0),
+            agent_reply: None,
+        })
+    }
     pub async fn check_access(&self, actor: &Member, id: &str) -> Result<(), ServiceError> {
         let s = self.state.lock().await;
         authorize(&s, actor, id).map(|_| ())

@@ -52,6 +52,7 @@ struct State {
     cursors: HashMap<String, u64>,
     terminals: HashMap<(String, String), Terminal>,
     agents: HashMap<(String, String), mpsc::Sender<AgentCommand>>,
+    agent_readers: HashMap<(String, String), tokio::task::AbortHandle>,
     backends: HashMap<String, Arc<dyn AgentBackend>>,
     default_reply_mode: ReplyMode,
 }
@@ -66,6 +67,26 @@ fn quoted_context(quotes: &[ContextQuote]) -> String {
     )
 }
 
+fn inline_context(state: &State, id: &str, text: &str) -> String {
+    delta_kernel::parse_mentions(text, "pi")
+        .into_iter()
+        .filter(|m| {
+            m.kind == MentionKind::Thread
+                && m.target != id
+                && shared_reference(state, id, &m.target)
+        })
+        .map(|m| {
+            format!(
+                "\n\nReferenced workspace {} ({}):\n{}",
+                m.label,
+                m.target,
+                published_context(state, &m.target, false)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
 fn published_context(state: &State, id: &str, include_references: bool) -> String {
     let Some(workspace) = state.workspaces.get(id) else {
         return String::new();
@@ -74,7 +95,15 @@ fn published_context(state: &State, id: &str, include_references: bool) -> Strin
         .entries
         .iter()
         .filter_map(|entry| match &entry.content {
-            Content::Text { text } => Some(format!("{text}{}", quoted_context(&entry.quotes))),
+            Content::Text { text } => Some(format!(
+                "{text}{}{}",
+                quoted_context(&entry.quotes),
+                if include_references {
+                    inline_context(state, id, text)
+                } else {
+                    String::new()
+                }
+            )),
             Content::Agent { activities, .. } => Some(
                 activities
                     .iter()
@@ -128,6 +157,8 @@ pub struct Service {
     stopping: watch::Sender<bool>,
     cwd: PathBuf,
     shell: String,
+    shell_login: bool,
+    desktop_terminal: Option<Arc<dyn delta_adapters::desktop_terminal::DesktopTerminalBackend>>,
 }
 
 impl Service {
@@ -202,6 +233,7 @@ impl Service {
                 cursors,
                 terminals: HashMap::new(),
                 agents: HashMap::new(),
+                agent_readers: HashMap::new(),
                 backends,
                 default_reply_mode: ReplyMode::Auto,
             })),
@@ -209,7 +241,22 @@ impl Service {
             stopping,
             cwd: cwd.canonicalize().map_err(internal)?,
             shell: std::env::var("DELTA_SHELL").unwrap_or_else(|_| "/bin/sh".into()),
+            shell_login: false,
+            desktop_terminal: None,
         })
+    }
+
+    pub fn with_terminal_shell(mut self, shell: String, login: bool) -> Self {
+        self.shell = shell;
+        self.shell_login = login;
+        self
+    }
+    pub fn with_desktop_terminal(
+        mut self,
+        backend: Arc<dyn delta_adapters::desktop_terminal::DesktopTerminalBackend>,
+    ) -> Self {
+        self.desktop_terminal = Some(backend);
+        self
     }
 
     pub async fn set_default_reply_mode(&self, mode: ReplyMode) -> Result<(), ServiceError> {
@@ -334,7 +381,19 @@ impl Service {
         let s = self.state.lock().await;
         let access = authorize(&s, actor, id)?;
         let workspace = s.workspaces.get(id).ok_or(ServiceError::NotFound)?;
+        let mut capabilities = vec!["member_roles".into(), "inline_threads".into()];
+        if self.desktop_terminal.is_some()
+            && access.can_execute
+            && s.journal
+                .account(&actor.id)
+                .map_err(internal)?
+                .is_some_and(|a| a.role == Role::Owner)
+        {
+            capabilities.push("desktop_terminal".into());
+        }
         Ok(Snapshot {
+            self_id: Some(actor.id.clone()),
+            capabilities,
             access: Some(access),
             members: s.journal.workspace_members(id).map_err(internal)?,
             workspace: workspace.info.clone(),
@@ -401,7 +460,24 @@ impl Service {
         command: Command,
     ) -> Result<Receipt, ServiceError> {
         let mut s = self.state.lock().await;
+        let canonical = s
+            .journal
+            .account(&actor.id)
+            .map_err(internal)?
+            .ok_or(ServiceError::Unauthorized)?;
+        let actor = &canonical;
         let access = authorize(&s, actor, id)?;
+        if let Command::PublishText { text, .. }
+        | Command::SubmitMessage { text, .. }
+        | Command::PromptAgent { prompt: text, .. } = &command
+        {
+            for mention in delta_kernel::parse_mentions(text, "pi")
+                .into_iter()
+                .filter(|m| m.kind == MentionKind::Thread)
+            {
+                authorize(&s, actor, &mention.target)?;
+            }
+        }
         let submission = matches!(&command, Command::SubmitMessage { .. });
         let explicit_request = match &command {
             Command::SubmitMessage { text, backend, .. } => {
@@ -500,7 +576,7 @@ impl Service {
         let result: Result<(), ServiceError> = match decision.effect {
             None => Ok(()),
             Some(Effect::OpenTerminal { id: entry }) => {
-                match Terminal::spawn(&self.cwd, &self.shell) {
+                match Terminal::spawn_with_login(&self.cwd, &self.shell, self.shell_login) {
                     Err(error) => {
                         eprintln!("terminal start: {error}");
                         self.commit(
@@ -636,7 +712,7 @@ impl Service {
                             let service = self.clone();
                             let workspace = id.to_owned();
                             let agent = entry.clone();
-                            tokio::spawn(async move {
+                            let reader = tokio::spawn(async move {
                                 while let Some(activity) = connection.events.recv().await {
                                     service
                                         .record(
@@ -650,6 +726,9 @@ impl Service {
                                 }
                                 let mut state = service.state.lock().await;
                                 state.agents.remove(&(workspace.clone(), agent.clone()));
+                                state
+                                    .agent_readers
+                                    .remove(&(workspace.clone(), agent.clone()));
                                 let status = state
                                     .workspaces
                                     .get(&workspace)
@@ -679,13 +758,19 @@ impl Service {
                                     eprintln!("backend disconnect persistence failed: {error:?}");
                                 }
                             });
+                            s.agent_readers.insert(key(&entry), reader.abort_handle());
                         }
                     }
                 }
                 let published = published_context(&s, id, true);
                 let quoted = quoted_context(&quotes);
+                let references = if !submission {
+                    inline_context(&s, id, &prompt)
+                } else {
+                    String::new()
+                };
                 let message = format!(
-                    "Published workspace content (reference material):\n<workspace>\n{published}\n</workspace>\n\nUser request:\n{prompt}{quoted}"
+                    "Published workspace content (reference material):\n<workspace>\n{published}\n</workspace>\n\nUser request:\n{prompt}{quoted}{references}"
                 );
                 s.agents
                     .get(&key(&entry))

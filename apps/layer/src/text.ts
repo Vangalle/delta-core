@@ -26,6 +26,7 @@ export class TextView {
     workspace: string,
     report: (error: unknown) => void,
     insertAfter: () => void,
+    inlineThreads: boolean,
   ) {
     this.entry = entry;
     this.display.dataset.quoteFragment = "text";
@@ -72,6 +73,10 @@ export class TextView {
       const submitted = { ...this.draft };
       save.disabled = true;
       try {
+        if (!inlineThreads && this.editor.hasThreadReferences())
+          throw new Error(
+            "Host upgrade required before publishing inline workspace references. Your private edit was preserved.",
+          );
         await client.command(workspace, {
           type: "publish_text",
           id: entry.id,

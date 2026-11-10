@@ -89,6 +89,10 @@ pub fn router(service: Service, assets: Option<PathBuf>) -> Router {
             get(members).post(add_friend),
         )
         .route("/api/v1/workspaces/{id}/invitations", post(invite))
+        .route(
+            "/api/v1/workspaces/{id}/members/{member}/role",
+            post(set_member_role),
+        )
         .route("/api/v1/invitations/{token}", get(invitation_preview))
         .route("/api/v1/invitations/accept", post(accept_invitation))
         .route("/api/v1/friends", get(friends))
@@ -98,6 +102,10 @@ pub fn router(service: Service, assets: Option<PathBuf>) -> Router {
         .route("/api/v1/workspaces", get(workspaces).post(create_workspace))
         .route("/api/v1/workspaces/{id}", get(snapshot))
         .route("/api/v1/workspaces/{id}/commands", post(command))
+        .route(
+            "/api/v1/workspaces/{id}/desktop-terminal",
+            post(desktop_terminal),
+        )
         .route("/api/v1/workspaces/{id}/events", get(events))
         .layer(DefaultBodyLimit::max(524_288))
         .with_state(service);
@@ -132,6 +140,24 @@ async fn invite(
 ) -> Result<Json<WorkspaceInvitation>, ServiceError> {
     let actor = member(&s, &headers).await?;
     Ok(Json(s.create_invitation(&actor, &id, body).await?))
+}
+async fn desktop_terminal(
+    State(s): State<Service>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(_body): Json<OpenDesktopTerminal>,
+) -> Result<Json<Receipt>, ServiceError> {
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.open_desktop_terminal(&actor, &id).await?))
+}
+async fn set_member_role(
+    State(s): State<Service>,
+    headers: HeaderMap,
+    Path((id, target)): Path<(String, String)>,
+    Json(body): Json<SetMemberRole>,
+) -> Result<Json<Receipt>, ServiceError> {
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.set_member_role(&actor, &id, &target, body).await?))
 }
 async fn invitation_preview(
     State(s): State<Service>,

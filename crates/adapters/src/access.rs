@@ -253,6 +253,34 @@ impl Journal {
         tx.commit()?;
         Ok(events)
     }
+    pub fn set_member_role(
+        &mut self,
+        workspace: &str,
+        target: &Member,
+        role: Role,
+        changes: &[(String, Vec<Change>)],
+    ) -> AdapterResult<Vec<(String, Event)>> {
+        let tx = self.connection.transaction()?;
+        if tx.execute(
+            "UPDATE workspace_members SET role=?1 WHERE workspace=?2 AND member=?3",
+            params![serde_json::to_string(&role)?, workspace, target.id],
+        )? != 1
+        {
+            return Err("workspace membership disappeared".into());
+        }
+        tx.execute(
+            "UPDATE members SET role=?1 WHERE id=?2",
+            params![serde_json::to_string(&target.role)?, target.id],
+        )?;
+        let mut result = Vec::new();
+        for (id, changes) in changes {
+            for event in append(&tx, id, changes)? {
+                result.push((id.clone(), event));
+            }
+        }
+        tx.commit()?;
+        Ok(result)
+    }
     pub fn friends(&self, actor: &str) -> AdapterResult<Vec<Friend>> {
         let mut stmt=self.connection.prepare("SELECT m.id,m.name,f.requested_by,f.accepted FROM friendships f JOIN members m ON m.id=CASE WHEN f.left_id=?1 THEN f.right_id ELSE f.left_id END WHERE f.left_id=?1 OR f.right_id=?1 ORDER BY f.rowid")?;
         Ok(stmt

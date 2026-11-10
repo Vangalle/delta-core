@@ -26,6 +26,13 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn spawn(cwd: &Path, shell: &str) -> AdapterResult<(Self, mpsc::Receiver<TerminalEvent>)> {
+        Self::spawn_with_login(cwd, shell, false)
+    }
+    pub fn spawn_with_login(
+        cwd: &Path,
+        shell: &str,
+        login: bool,
+    ) -> AdapterResult<(Self, mpsc::Receiver<TerminalEvent>)> {
         let pair = native_pty_system().openpty(PtySize {
             rows: 12,
             cols: 100,
@@ -33,6 +40,9 @@ impl Terminal {
             pixel_height: 0,
         })?;
         let mut command = CommandBuilder::new(shell);
+        if login {
+            command.arg("-l");
+        }
         command.arg("-i");
         command.cwd(cwd);
         command.env("TERM", "xterm-256color");

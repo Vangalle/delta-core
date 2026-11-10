@@ -9,6 +9,7 @@ import {
   type ContextQuote,
   type ReplyMode,
 } from "@delta-core/client";
+import { setupTheme } from "./theme.ts";
 import { People, showInvitation } from "./people.ts";
 import { TerminalView } from "./terminal.ts";
 import { AgentView } from "./agent.ts";
@@ -27,6 +28,7 @@ import { AuthorIdentity } from "./identity.ts";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 
+setupTheme(get<HTMLSelectElement>("theme"));
 const draft = new RichEditor(
   get("draft"),
   "Private draft",
@@ -51,7 +53,14 @@ let subscription: AbortController | undefined;
 let navigation = 0;
 let after: string | null = null;
 let busy = false;
-let choices: Array<{ label: string; action: () => void }> = [];
+let choices: Array<{
+  label: string;
+  action: () => void;
+  complete?: () => void;
+}> = [];
+let selectedChoice = 0;
+let paletteKey = "";
+let dismissedTrigger: string | null = null;
 const quoteNavigation: QuoteNavigation = {
   title: (id) =>
     workspaces.find((workspace) => workspace.id === id)?.title ?? id,
@@ -187,6 +196,7 @@ function renderEntries(): void {
           snapshot.workspace.id,
           report,
           () => selectPosition(entry.id),
+          snapshot.capabilities?.includes("inline_threads") ?? false,
         );
       else if (entry.content.type === "terminal") {
         const terminal = new TerminalView(
@@ -361,12 +371,30 @@ async function openWorkspace(id: string): Promise<void> {
       id,
       snapshot.cursor,
       (event) => {
-        if (current !== subscription) return;
+        if (current !== subscription || generation !== navigation) return;
         applyEvent(snapshot, event);
+        if (
+          event.change.type === "member_role_changed" &&
+          event.change.member.id === account.id
+        ) {
+          void client
+            .me()
+            .then(async (nextAccount) => {
+              if (current !== subscription || generation !== navigation) return;
+              account = nextAccount;
+              await openWorkspace(id);
+            })
+            .catch(report);
+          return;
+        }
         members = snapshot.members ?? members;
         renderEntries();
         renderPolicy();
-        if (event.change.type === "member_added") updatePalette();
+        if (
+          event.change.type === "member_added" ||
+          event.change.type === "member_role_changed"
+        )
+          updatePalette();
       },
       {
         signal: current.signal,
@@ -389,7 +417,27 @@ get("restore-order").addEventListener("click", () => {
     get<HTMLDetailsElement>("workspace-actions").open = false;
   });
 });
+get("desktop-terminal").addEventListener(
+  "click",
+  () =>
+    void act(async () => {
+      if (
+        !window.confirm(
+          "Open a NEW Terminal window on the Host desktop? This experimental action runs outside the shared document; its output is not shared here.",
+        )
+      )
+        return;
+      await client.openDesktopTerminal(snapshot.workspace.id);
+      get<HTMLDetailsElement>("workspace-actions").open = false;
+    }),
+);
 function renderPolicy(): void {
+  const desktop = get<HTMLButtonElement>("desktop-terminal");
+  desktop.hidden = account.role !== "owner";
+  desktop.disabled = !snapshot.capabilities?.includes("desktop_terminal");
+  desktop.title = desktop.disabled
+    ? "Disabled on this Host. Enable DELTA_ENABLE_DESKTOP_TERMINAL=1 and restart to opt in."
+    : "Opens on the Host desktop, not on collaborators’ computers; output is not shared";
   get("workspace-actions").hidden =
     (snapshot.access?.role ?? me.role) !== "owner";
   replyMode.value = snapshot.collaboration?.reply_mode ?? "mentions_only";
@@ -541,6 +589,18 @@ async function insert(command: Command): Promise<void> {
 function updatePalette(): void {
   choices = [];
   const trigger = draft.trigger();
+  const key = trigger ? `${trigger.from}:${trigger.to}:${trigger.keyword}` : "";
+  if (key !== paletteKey) {
+    selectedChoice = 0;
+    paletteKey = key;
+  }
+  if (key === dismissedTrigger) {
+    palette.hidden = true;
+    return;
+  }
+  dismissedTrigger = null;
+  const supportsThreads =
+    snapshot.capabilities?.includes("inline_threads") ?? false;
   if (trigger) {
     const keyword = trigger.keyword;
     if (
@@ -549,33 +609,29 @@ function updatePalette(): void {
     )
       choices.push({
         label: "Terminal · run here",
+        complete: () => {
+          if (keyword !== "terminal") draft.setTrigger("@terminal");
+          updatePalette();
+        },
         action: () => {
           void act(async () =>
             insert({ type: "open_terminal", id: crypto.randomUUID(), after }),
           );
         },
       });
-    if (keyword === "threads")
+    if (supportsThreads && keyword === "threads")
       choices.push(
         ...workspaces
           .filter((w) => w.id !== snapshot.workspace.id)
           .map((w) => ({
             label: `Reference ${w.title}`,
             action: () => {
-              void act(async () =>
-                insert({
-                  type: "insert_reference",
-                  id: crypto.randomUUID(),
-                  kind: "thread",
-                  target: w.id,
-                  label: w.title,
-                  after,
-                }),
-              );
+              draft.insertMention("thread", w.id, w.title);
+              updatePalette();
             },
           })),
       );
-    else if ("threads".startsWith(keyword))
+    else if (supportsThreads && "threads".startsWith(keyword))
       choices.push({
         label: "Threads · reference a workspace",
         action: () => {
@@ -610,16 +666,45 @@ function updatePalette(): void {
         },
       });
   }
+  selectedChoice = Math.min(selectedChoice, Math.max(0, choices.length - 1));
   palette.replaceChildren(
-    ...choices.map((c) => button(c.label, c.action, "palette-item")),
+    ...choices.map((choice, index) => {
+      const item = button(choice.label, choice.action, "palette-item");
+      item.id = `completion-${index}`;
+      item.classList.toggle("active", index === selectedChoice);
+      if (index === selectedChoice) item.setAttribute("aria-current", "true");
+      return item;
+    }),
   );
-  palette.hidden = !choices.length;
+  const unavailable =
+    !!trigger?.keyword &&
+    "threads".startsWith(trigger.keyword) &&
+    !supportsThreads;
+  if (unavailable)
+    palette.append(
+      node(
+        "p",
+        "completion-unavailable",
+        "Host upgrade required for inline workspace references.",
+      ),
+    );
+  palette.hidden = !choices.length && !unavailable;
 }
 
+function requireInlineThreadSupport(): void {
+  if (
+    !snapshot.capabilities?.includes("inline_threads") &&
+    draft.hasThreadReferences()
+  )
+    throw new Error(
+      "Host upgrade required before publishing inline workspace references. Your draft was preserved.",
+    );
+}
 publish.addEventListener("click", () => {
   void act(async () => {
     const quotes = quoteTray.value;
     if (!draft.value.trim() && !quotes.length) return;
+    requireInlineThreadSupport();
     const text = draft.value;
     const id = crypto.randomUUID();
     const generation = navigation;
@@ -652,6 +737,7 @@ publish.addEventListener("click", () => {
 ask.addEventListener("click", () => {
   void act(async () => {
     if (!draft.value.trim()) return;
+    requireInlineThreadSupport();
     const text = draft.value;
     const id = crypto.randomUUID();
     const generation = navigation;
@@ -674,15 +760,51 @@ draft.onChange = () => {
 };
 draft.onSelectionChange = () => updatePalette();
 draft.onKeyDown = (event) => {
+  if (event.isComposing) return false;
+  const plain =
+    !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+  if (
+    plain &&
+    !palette.hidden &&
+    ["Tab", "Enter", "ArrowDown", "ArrowUp"].includes(event.key)
+  ) {
+    const trigger = draft.trigger();
+    const key = trigger
+      ? `${trigger.from}:${trigger.to}:${trigger.keyword}`
+      : "";
+    if (!trigger || key !== paletteKey) updatePalette();
+  }
+  if (event.key === "Tab") {
+    if (!plain || palette.hidden || !choices.length) return false;
+    event.preventDefault();
+    const choice = choices[selectedChoice];
+    (choice.complete ?? choice.action)();
+    return true;
+  }
+  if (
+    plain &&
+    !palette.hidden &&
+    choices.length &&
+    (event.key === "ArrowDown" || event.key === "ArrowUp")
+  ) {
+    event.preventDefault();
+    selectedChoice =
+      (selectedChoice + (event.key === "ArrowDown" ? 1 : -1) + choices.length) %
+      choices.length;
+    updatePalette();
+    return true;
+  }
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
     event.preventDefault();
     publish.click();
     return true;
   } else if (event.key === "Enter" && !event.shiftKey && choices.length) {
     event.preventDefault();
-    choices[0].action();
+    choices[selectedChoice].action();
     return true;
-  } else if (event.key === "Escape") {
+  } else if (event.key === "Escape" && !palette.hidden) {
+    event.preventDefault();
+    dismissedTrigger = paletteKey;
     choices = [];
     palette.hidden = true;
   }

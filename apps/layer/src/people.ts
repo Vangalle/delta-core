@@ -144,10 +144,55 @@ export class People {
     roster.replaceChildren();
     for (const member of members) {
       const row = node("div", "person-row");
-      row.append(
-        node("span", "", member.name),
-        node("small", "muted", member.role),
-      );
+      row.dataset.memberId = member.id;
+      row.append(node("span", "", member.name));
+      if (
+        member.role !== "owner" &&
+        this.current()?.capabilities?.includes("member_roles")
+      ) {
+        const controls = node("div", "member-role-controls");
+        const select = node("select");
+        select.setAttribute("aria-label", `Workspace role for ${member.name}`);
+        for (const [value, label] of [
+          ["viewer", "Observer"],
+          ["editor", "Editor"],
+          ["executor", "Executor"],
+        ] as const) {
+          const option = node("option", "", label);
+          option.value = value;
+          option.disabled =
+            value === "executor" &&
+            this.identity().role !== "owner" &&
+            member.role !== "executor";
+          select.append(option);
+        }
+        select.value = member.role;
+        const apply = button(
+          "Apply role",
+          () =>
+            void this.run("invite-error", async () => {
+              const role = select.value as Role;
+              if (role === member.role) return;
+              const warning =
+                role === "executor"
+                  ? `Allow ${member.name} to run unsandboxed Host code through terminals and Agent tools? This trust is broader than a workspace sandbox.`
+                  : member.role === "executor"
+                    ? `Remove execution rights in this workspace and stop its controlled sessions? Host execution trust in other workspaces is unchanged.`
+                    : "";
+              if (warning && !window.confirm(warning)) return;
+              apply.disabled = true;
+              try {
+                await this.client().setMemberRole(id, member.id, role);
+                await this.members();
+                await this.changed();
+              } finally {
+                apply.disabled = false;
+              }
+            }),
+        );
+        controls.append(select, apply);
+        row.append(controls);
+      } else row.append(node("small", "muted", member.role));
       roster.append(row);
     }
     const list = get("workspace-friends");

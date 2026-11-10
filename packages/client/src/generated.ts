@@ -88,6 +88,15 @@ export type InteractionResponse =
     };
 export type Change =
   | {
+      actor: string;
+      type: "desktop_terminal_opened";
+    }
+  | {
+      can_execute: boolean;
+      member: Member;
+      type: "member_role_changed";
+    }
+  | {
       member: Member;
       type: "member_added";
     }
@@ -225,7 +234,7 @@ export type Activity =
       type: "backend";
     };
 export type InteractionKind = "confirm" | "select" | "input" | "editor";
-export type MentionKind = "user" | "agent";
+export type MentionKind = "user" | "agent" | "thread";
 export type FriendStatus = "incoming" | "outgoing" | "friend";
 export type AgentReplyOutcome = "queued" | "permission_required" | "failed";
 
@@ -244,7 +253,9 @@ export interface Contract {
   invitation_preview: InvitationPreview;
   invite_member: InviteMember;
   member: Member;
+  open_desktop_terminal: OpenDesktopTerminal;
   receipt: Receipt;
+  set_member_role: SetMemberRole;
   snapshot: Snapshot;
   workspace_info: WorkspaceInfo;
   workspace_invitation: WorkspaceInvitation;
@@ -332,16 +343,22 @@ export interface InviteMember {
   name: string;
   role: Role;
 }
+export interface OpenDesktopTerminal {}
 export interface Receipt {
   agent_reply?: AgentReplyOutcome | null;
   cursor: number;
 }
+export interface SetMemberRole {
+  role: Role;
+}
 export interface Snapshot {
   access?: WorkspaceAccess | null;
+  capabilities?: string[];
   collaboration?: Collaboration;
   cursor: number;
   entries: Entry[];
   members?: Member[];
+  self_id?: string | null;
   workspace: WorkspaceInfo;
 }
 export interface WorkspaceAccess {

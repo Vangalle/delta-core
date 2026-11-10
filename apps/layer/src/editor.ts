@@ -1,4 +1,4 @@
-import { Editor } from "@tiptap/core";
+import { Editor, type JSONContent } from "@tiptap/core";
 import { EditorState, Selection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import CodeBlock from "@tiptap/extension-code-block";
@@ -121,6 +121,8 @@ export class RichEditor {
     this.source.addEventListener("keydown", (event) => {
       this.handleKey(event);
     });
+    for (const event of ["select", "selectionchange", "keyup", "click"])
+      this.source.addEventListener(event, () => this.onSelectionChange?.());
     this.updateEmpty();
   }
   private handleKey(event: KeyboardEvent): boolean {
@@ -134,6 +136,21 @@ export class RichEditor {
       return true;
     }
     return this.onKeyDown?.(event) ?? false;
+  }
+  hasThreadReferences(): boolean {
+    const content = this.sourceMode
+      ? this.editor.markdown!.parse(this.source.value)
+      : this.editor.getJSON();
+    const contains = (node: JSONContent): boolean =>
+      (node.type === "inlineMention" && node.attrs?.kind === "thread") ||
+      (node.content ?? []).some(contains);
+    if (contains(content)) return true;
+    // A hand-written or pasted Markdown link carries no mention atom, so also
+    // inspect the exact text that would be published. Over-blocking a link
+    // inside code only fails closed with the draft preserved.
+    return /\]\s*\(\s*delta-thread:/.test(
+      this.sourceMode ? this.source.value : this.value,
+    );
   }
   get value(): string {
     return this.sourceMode ? this.source.value : this.editor.getMarkdown();
@@ -197,6 +214,7 @@ export class RichEditor {
     to: number;
   } | null {
     if (this.sourceMode) {
+      if (this.source.selectionStart !== this.source.selectionEnd) return null;
       const end = this.source.selectionStart;
       const match = /(?:^|\s)@(\w*)$/.exec(this.source.value.slice(0, end));
       if (!match) return null;
@@ -236,12 +254,13 @@ export class RichEditor {
         trigger.from + text.length,
       );
       this.onChange?.();
-    } else
+    } else {
       this.editor
         .chain()
-        .focus()
         .insertContentAt({ from: trigger.from, to: trigger.to }, text)
         .run();
+      this.editor.view.focus();
+    }
   }
   insertMention(kind: MentionType, target: string, label: string): void {
     const trigger = this.trigger();
@@ -252,7 +271,6 @@ export class RichEditor {
     } else {
       this.editor
         .chain()
-        .focus()
         .insertContentAt(
           { from: trigger.from, to: trigger.to },
           { type: "inlineMention", attrs: { kind, target, label } },

@@ -106,6 +106,11 @@ pub fn parse_mentions(text: &str, backend: &str) -> Vec<Mention> {
                             dest_url
                                 .strip_prefix("delta-agent:")
                                 .map(|id| (MentionKind::Agent, id))
+                        })
+                        .or_else(|| {
+                            dest_url
+                                .strip_prefix("delta-thread:")
+                                .map(|id| (MentionKind::Thread, id))
                         });
                     if let Some((kind, target)) =
                         target.filter(|(_, id)| !id.is_empty() && id.len() <= 128)

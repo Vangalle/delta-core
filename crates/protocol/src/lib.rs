@@ -94,6 +94,7 @@ pub struct Collaboration {
 pub enum MentionKind {
     User,
     Agent,
+    Thread,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -267,6 +268,13 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Change {
+    DesktopTerminalOpened {
+        actor: String,
+    },
+    MemberRoleChanged {
+        member: Member,
+        can_execute: bool,
+    },
     MemberAdded {
         member: Member,
     },
@@ -322,6 +330,10 @@ pub struct WorkspaceInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Snapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub self_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access: Option<WorkspaceAccess>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -413,6 +425,14 @@ pub struct AddFriend {
     pub member_id: String,
     pub role: Role,
 }
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetMemberRole {
+    pub role: Role,
+}
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OpenDesktopTerminal {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ApiError {
@@ -450,6 +470,8 @@ pub struct Contract {
     pub friend: Friend,
     pub friend_target: FriendTarget,
     pub add_friend: AddFriend,
+    pub set_member_role: SetMemberRole,
+    pub open_desktop_terminal: OpenDesktopTerminal,
     pub command: Command,
     pub event: Event,
     pub snapshot: Snapshot,

@@ -43,6 +43,9 @@ const child = spawn(resolve("target/debug/delta-host"), {
   env: {
     ...process.env,
     DELTA_DATA: data,
+    DELTA_SHELL: "/bin/sh",
+    DELTA_TERMINAL_LOGIN: "0",
+    DELTA_ENABLE_DESKTOP_TERMINAL: "0",
     DELTA_CWD: cwd,
     DELTA_PI: fixture,
     DELTA_DEFAULT_REPLY_MODE: "mentions_only",

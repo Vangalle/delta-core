@@ -2,7 +2,7 @@ import { Node } from "@tiptap/core";
 import type { Tokens } from "marked";
 import { node } from "./ui.ts";
 
-export type MentionType = "user" | "agent";
+export type MentionType = "user" | "agent" | "thread";
 export function mentionMarkdown(
   kind: MentionType,
   target: string,
@@ -16,7 +16,9 @@ const tokenizer = {
   start: (text: string) => text.indexOf("[@"),
   tokenize: (text: string) => {
     const match =
-      /^\[(@(?:\\.|[^\]\\])+)\]\(delta-(user|agent):([^\s)]+)\)/.exec(text);
+      /^\[(@(?:\\.|[^\]\\])+)\]\(delta-(user|agent|thread):([^\s)]+)\)/.exec(
+        text,
+      );
     return match
       ? {
           type: "inlineMention",
@@ -31,8 +33,18 @@ const tokenizer = {
 export const mentionMarkdownExtension = {
   ...tokenizer,
   tokenizer: tokenizer.tokenize,
-  renderer: (token: Tokens.Generic) =>
-    node("span", "mention", `@${String(token.label)}`).outerHTML,
+  renderer: (token: Tokens.Generic) => {
+    if (token.kind === "thread") {
+      const link = node(
+        "a",
+        "mention workspace-reference",
+        `@${String(token.label)}`,
+      );
+      link.href = `/?workspace=${encodeURIComponent(String(token.target))}`;
+      return link.outerHTML;
+    }
+    return node("span", "mention", `@${String(token.label)}`).outerHTML;
+  },
 };
 export const InlineMention = Node.create({
   name: "inlineMention",
@@ -45,7 +57,9 @@ export const InlineMention = Node.create({
       kind: {
         default: "user",
         parseHTML: (element) =>
-          element.getAttribute("data-kind") === "agent" ? "agent" : "user",
+          ["agent", "thread"].includes(element.getAttribute("data-kind") ?? "")
+            ? element.getAttribute("data-kind")
+            : "user",
       },
       target: {
         default: "",

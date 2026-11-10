@@ -74,6 +74,36 @@ test("workspace member events update only the scoped roster without granting loc
   assert.equal(snapshot.access?.can_execute, false);
 });
 
+test("member role changes project only the authenticated snapshot access", () => {
+  const snapshot: Snapshot = {
+    workspace: { id: "w", title: "W" },
+    cursor: 1,
+    entries: [],
+    self_id: "peer",
+    members: [{ id: "peer", name: "Peer", role: "editor" }],
+    access: { role: "editor", can_execute: false },
+  };
+  applyEvent(snapshot, {
+    sequence: 2,
+    change: {
+      type: "member_role_changed",
+      member: { id: "peer", name: "Peer", role: "executor" },
+      can_execute: true,
+    },
+  });
+  assert.deepEqual(snapshot.access, { role: "executor", can_execute: true });
+  assert.equal(snapshot.members?.[0].role, "executor");
+  applyEvent(snapshot, {
+    sequence: 3,
+    change: {
+      type: "member_role_changed",
+      member: { id: "other", name: "Other", role: "viewer" },
+      can_execute: false,
+    },
+  });
+  assert.equal(snapshot.access?.can_execute, true);
+});
+
 test("chronology restoration moves existing entries without replacing their contents", () => {
   const snapshot: Snapshot = {
     workspace: { id: "w", title: "Work" },

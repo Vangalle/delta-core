@@ -63,6 +63,12 @@
         <header class="topbar">
           <span id="workspace-breadcrumb"></span>
           <div class="topbar-right">
+            <label class="theme-control"
+              >Theme<select id="theme" aria-label="Theme">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select></label
+            >
             <label class="reply-mode-control"
               >Agent
               <select id="reply-mode" aria-label="Agent replies">
@@ -76,6 +82,9 @@
               </summary>
               <div class="workspace-action-items">
                 <button id="invite" type="button">Invite</button>
+                <button id="desktop-terminal" type="button" disabled>
+                  Open Host Terminal · Experimental
+                </button>
                 <button id="restore-order" type="button">
                   Restore chronological order
                 </button>
@@ -119,6 +128,7 @@
               </div>
             </div>
             <p class="insert-hint">
+              <kbd>Tab</kbd> complete · ↑/↓ select · Esc dismiss<br />
               <code>@agent</code> ask the agent <span>·</span>
               <code>@terminal</code> execute here <span>·</span>
               <code>@threads</code> reference a workspace <span>·</span>

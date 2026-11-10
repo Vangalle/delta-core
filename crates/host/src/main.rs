@@ -35,8 +35,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("First-start owner token: {token}");
         token
     };
-    let service =
-        Service::open(&data, &cwd, &token).map_err(|e| format!("host initialization: {e:?}"))?;
+    let shell = std::env::var("DELTA_SHELL")
+        .or_else(|_| std::env::var("SHELL"))
+        .unwrap_or_else(|_| "/bin/sh".into());
+    let login = !matches!(
+        std::env::var("DELTA_TERMINAL_LOGIN")
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "0" | "false" | "off"
+    );
+    let mut service = Service::open(&data, &cwd, &token)
+        .map_err(|e| format!("host initialization: {e:?}"))?
+        .with_terminal_shell(shell, login);
+    if std::env::var("DELTA_ENABLE_DESKTOP_TERMINAL").as_deref() == Ok("1")
+        && cfg!(target_os = "macos")
+    {
+        service = service.with_desktop_terminal(std::sync::Arc::new(
+            delta_adapters::desktop_terminal::MacTerminal,
+        ));
+    }
     if let Ok(mode) = std::env::var("DELTA_DEFAULT_REPLY_MODE") {
         let mode = match mode.as_str() {
             "auto" => delta_protocol::ReplyMode::Auto,

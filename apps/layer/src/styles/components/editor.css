@@ -19,7 +19,13 @@
   font-size: 12px;
   text-align: left;
 }
-.palette-item:first-child {
+.completion-unavailable {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.palette-item.active {
   background: #ffffff05;
 }
 .rich-content,

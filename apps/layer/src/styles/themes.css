@@ -1,0 +1,78 @@
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f9f7;
+  --sidebar: #eef2ee;
+  --surface: #ffffff;
+  --ink: #1c2822;
+  --muted: #586760;
+  --line: #d3ddd5;
+  --accent: #2d694a;
+  --accent-ink: #ffffff;
+  --warning: #885915;
+  --danger: #9a3f32;
+  --terminal-bg: #f0f4f0;
+  --terminal-ink: #202d25;
+  --terminal-cursor: #286344;
+  --terminal-selection: #c5dacb;
+  --diagram-fill: #e6efe8;
+  --diagram-stroke: #527460;
+  --diagram-edge: #52695a;
+}
+.theme-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+.theme-control select {
+  padding: 4px 6px;
+  font-size: 11px;
+}
+:root[data-theme="light"] button:hover,
+:root[data-theme="light"] .workspace-item.active,
+:root[data-theme="light"] .palette-item.active {
+  background: #00000008;
+}
+:root[data-theme="light"] .primary:hover {
+  background: #24573c;
+}
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .document-footer {
+  border-color: var(--line);
+}
+:root[data-theme="light"] .palette {
+  background: var(--surface);
+}
+:root[data-theme="light"] .rich-content pre,
+:root[data-theme="light"] .rich-editor pre {
+  background: #eaf0eb;
+}
+:root[data-theme="light"] .rich-content :not(pre) > code,
+:root[data-theme="light"] .rich-editor :not(pre) > code,
+:root[data-theme="light"] .rich-content th,
+:root[data-theme="light"] .rich-editor th {
+  background: #00000006;
+}
+:root[data-theme="light"] .edit-draft {
+  border-color: var(--accent);
+}
+:root[data-theme="light"] .notice {
+  background: #f3e8d4;
+  color: #684610;
+}
+:root[data-theme="light"] .error {
+  color: var(--danger);
+}
+:root[data-theme="light"] .insert-hint,
+:root[data-theme="light"] .insert-hint span,
+:root[data-theme="light"] .insert-hint code,
+:root[data-theme="light"] .document-footer,
+:root[data-theme="light"] .rich-editor .tiptap.is-empty:before {
+  color: var(--muted);
+}
+.mermaid-diagram svg .messageLine0,
+.mermaid-diagram svg .messageLine1,
+.mermaid-diagram svg .loopLine {
+  stroke: var(--diagram-edge);
+}
