@@ -20,6 +20,8 @@ export class TerminalView {
   private rows = 12;
   private cols = 100;
   private canControl: boolean;
+  private live = false;
+  private close: HTMLButtonElement;
   private unwatchTheme: () => void = () => {};
   constructor(
     content: TerminalContent,
@@ -48,10 +50,11 @@ export class TerminalView {
       this.state,
       this.permission,
     );
-    if (this.canControl)
-      header.append(
-        button("Close terminal", () => send({ type: "close_terminal", id })),
-      );
+    // Closing needs a running session; keep the control but reveal it only then.
+    this.close = button("Close terminal", () =>
+      send({ type: "close_terminal", id }),
+    );
+    if (this.canControl) header.append(this.close);
     else
       this.permission.textContent = `Read only · controlled by ${names.get(content.controller) ?? content.controller}`;
     const surface = node("div", "terminal-surface");
@@ -101,7 +104,7 @@ export class TerminalView {
       return false;
     });
     this.terminal.onData((data) => {
-      if (this.canControl) send({ type: "terminal_input", id, data });
+      if (this.live) send({ type: "terminal_input", id, data });
     });
     const fit = () => {
       if (this.disposed || !this.element.isConnected) return;
@@ -111,7 +114,7 @@ export class TerminalView {
       if (cols !== this.cols) {
         this.cols = cols;
         this.terminal.resize(cols, this.rows);
-        if (this.canControl)
+        if (this.live)
           send({ type: "resize_terminal", id, cols, rows: this.rows });
       }
     };
@@ -131,7 +134,7 @@ export class TerminalView {
       if (needed > this.rows) {
         this.rows = needed;
         this.terminal.resize(this.cols, this.rows);
-        if (this.canControl)
+        if (this.live)
           send({
             type: "resize_terminal",
             id,
@@ -144,6 +147,11 @@ export class TerminalView {
   }
   update(content: TerminalContent): void {
     this.state.textContent = content.status;
+    // Only a running session accepts control commands; an interrupted or closed
+    // terminal stays readable, but must not keep sending resize/input that the
+    // Host answers with 503 and a blocking error banner.
+    this.live = this.canControl && content.status === "running";
+    this.close.hidden = !this.live;
     this.terminal.options.disableStdin =
       !this.canControl || content.status !== "running";
     for (const chunk of content.output.slice(this.count)) {
