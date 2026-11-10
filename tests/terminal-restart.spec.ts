@@ -14,8 +14,13 @@ test("a terminal left interrupted by a Host restart stays readable without contr
 }) => {
   const w = await client.createWorkspace("Restarted terminal");
   await client.command(w.id, { type: "open_terminal", id: "t", after: null });
+  await client.command(w.id, {
+    type: "terminal_input",
+    id: "t",
+    data: 'printf "\\nRESTART_KEPT_OUTPUT\\n"\r',
+  });
   // The fixture Host keeps a live PTY, so present the entry exactly as it looks
-  // after a restart: the recorded output and an interrupted session status.
+  // after a restart: recorded output and an interrupted session status.
   await page.route(`**/api/v1/workspaces/${w.id}`, async (route) => {
     const response = await route.fetch();
     const json = await response.json();
@@ -31,13 +36,24 @@ test("a terminal left interrupted by a Host restart stays readable without contr
   });
   await enter(page, w.id);
   const terminal = page.locator(".terminal-entry");
-  await expect(terminal).toHaveCount(1);
+  await expect(terminal).toBeVisible();
   await expect(terminal.locator(".terminal-state")).toHaveText("interrupted");
+  await expect(terminal.locator(".terminal-display")).toBeVisible();
+  await expect(page.getByTestId("terminal-transcript")).toContainText(
+    "RESTART_KEPT_OUTPUT",
+  );
   await expect(
     page.getByRole("button", { name: "Close terminal", exact: true }),
   ).toBeHidden();
-  await expect(page.locator("#notice")).toBeHidden();
+  await expect(terminal.locator(".terminal-permission")).toContainText(
+    "Session ended",
+  );
+  // Change the layout so the fit logic re-measures with different columns; an
+  // unguarded view sends resize_terminal here and the Host answers 503.
+  await page.setViewportSize({ width: 900, height: 700 });
+  await expect(terminal.locator(".terminal-display")).toBeVisible();
   await page.waitForTimeout(400);
+  await expect(page.locator("#notice")).toBeHidden();
   expect(
     commands.filter(
       (body) =>

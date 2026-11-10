@@ -152,6 +152,9 @@ export class TerminalView {
     // Host answers with 503 and a blocking error banner.
     this.live = this.canControl && content.status === "running";
     this.close.hidden = !this.live;
+    if (this.canControl && !this.live)
+      this.permission.textContent =
+        "Session ended · start a new one with @terminal";
     this.terminal.options.disableStdin =
       !this.canControl || content.status !== "running";
     for (const chunk of content.output.slice(this.count)) {
