@@ -13,7 +13,7 @@ import {
 import { TerminalView } from "./terminal.ts";
 import { AgentView } from "./agent.ts";
 import { TextView } from "./text.ts";
-import { node, button, get } from "./ui.ts";
+import { node, button, get, placeDocumentChildren } from "./ui.ts";
 import { RichEditor } from "./editor.ts";
 import {
   ContextQuotes,
@@ -95,7 +95,12 @@ function saveDraft(): void {
   try {
     localStorage.setItem(
       draftKey(),
-      JSON.stringify({ text: draft.value, after, quotes: quoteTray.value }),
+      JSON.stringify({
+        text: draft.value,
+        after,
+        explicit_position: after !== null,
+        quotes: quoteTray.value,
+      }),
     );
   } catch {
     report(
@@ -106,10 +111,15 @@ function saveDraft(): void {
   }
 }
 function placeComposer(): void {
-  if (after) {
-    const anchor = views.get(after)?.element;
-    if (anchor && anchor.nextSibling !== compose) anchor.after(compose);
-  } else if (flow.lastChild !== compose) flow.append(compose);
+  const elements = snapshot.entries.flatMap((entry) => {
+    const view = views.get(entry.id);
+    return view ? [view.element] : [];
+  });
+  const anchor = after
+    ? elements.findIndex((element) => element.dataset.entryId === after)
+    : -1;
+  elements.splice(anchor >= 0 ? anchor + 1 : elements.length, 0, compose);
+  placeDocumentChildren(flow, elements);
 }
 function selectPosition(id: string): void {
   after = id;
@@ -313,12 +323,13 @@ async function openWorkspace(id: string): Promise<void> {
     ? (JSON.parse(saved) as {
         text: string;
         after: string | null;
+        explicit_position?: boolean;
         quotes?: ContextQuote[];
       })
     : null;
   draft.reset(restored?.text ?? "");
   quoteTray.value = restored?.quotes ?? [];
-  after = restored?.after ?? null;
+  after = restored?.explicit_position ? restored.after : null;
   if (after && !snapshot.entries.some((e) => e.id === after)) after = null;
   history.replaceState(null, "", `/?workspace=${encodeURIComponent(id)}`);
   renderNavigation();
@@ -363,7 +374,14 @@ async function openWorkspace(id: string): Promise<void> {
     )
     .catch(report);
 }
+get("restore-order").addEventListener("click", () => {
+  void act(async () => {
+    await client.restoreChronologicalOrder(snapshot.workspace.id);
+    get<HTMLDetailsElement>("workspace-actions").open = false;
+  });
+});
 function renderPolicy(): void {
+  get("workspace-actions").hidden = me.role !== "owner";
   replyMode.value = snapshot.collaboration?.reply_mode ?? "mentions_only";
   replyMode.disabled = me.role !== "owner" && me.role !== "executor";
   replyMode.title = replyMode.disabled
@@ -454,7 +472,9 @@ function completeDraft(
   id: string,
   remaining: string,
   submittedQuotes: ContextQuote[] = [],
+  append = false,
 ): void {
+  const target = append ? null : id;
   const sent = new Set(submittedQuotes.map(quoteKey));
   const retained = (quotes: ContextQuote[]) =>
     quotes.filter((quote) => !sent.has(quoteKey(quote)));
@@ -469,14 +489,15 @@ function completeDraft(
       key,
       JSON.stringify({
         text: saved.text === original ? remaining : saved.text,
-        after: id,
+        after: target,
+        explicit_position: target !== null,
         quotes: retained(saved.quotes ?? []),
       }),
     );
   }
   if (generation !== navigation) return;
   quoteTray.value = retained(quoteTray.value);
-  after = id;
+  after = target;
   if (draft.value === original) draft.value = remaining;
   saveDraft();
   updatePalette();
@@ -580,11 +601,11 @@ publish.addEventListener("click", () => {
     const receipt = await client.submitMessage(snapshot.workspace.id, {
       id,
       text,
-      after,
+      after: null,
       quotes,
       backend: "pi",
     });
-    completeDraft(generation, key, text, id, "", quotes);
+    completeDraft(generation, key, text, id, "", quotes, true);
     if (
       generation === navigation &&
       receipt.agent_reply === "permission_required"
@@ -615,10 +636,10 @@ ask.addEventListener("click", () => {
       id,
       backend: "pi",
       prompt: text,
-      after,
+      after: null,
       quotes,
     });
-    completeDraft(generation, key, text, id, "", quotes);
+    completeDraft(generation, key, text, id, "", quotes, true);
   });
 });
 draft.onChange = () => {

@@ -1,3 +1,29 @@
+.workspace-actions {
+  position: relative;
+}
+.workspace-actions summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 4px;
+  font-size: 18px;
+}
+.workspace-actions summary::-webkit-details-marker {
+  display: none;
+}
+.workspace-action-items {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+}
+.workspace-action-items button {
+  width: 100%;
+  text-align: left;
+}
 .notice {
   position: sticky;
   top: 0;

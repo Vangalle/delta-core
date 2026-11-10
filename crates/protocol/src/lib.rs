@@ -203,6 +203,7 @@ pub struct Entry {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
     JoinWorkspace,
+    RestoreChronologicalOrder,
     SetReplyMode {
         mode: ReplyMode,
     },
@@ -266,6 +267,9 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Change {
+    OrderRestored {
+        ids: Vec<String>,
+    },
     ParticipantJoined {
         member: String,
     },

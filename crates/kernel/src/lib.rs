@@ -62,6 +62,7 @@ pub struct Workspace {
     pub info: WorkspaceInfo,
     pub entries: Vec<Entry>,
     pub collaboration: Collaboration,
+    creation_order: Vec<String>,
 }
 
 impl Workspace {
@@ -70,6 +71,7 @@ impl Workspace {
             info: WorkspaceInfo { id, title },
             entries: Vec::new(),
             collaboration: Collaboration::default(),
+            creation_order: Vec::new(),
         }
     }
 
@@ -165,6 +167,17 @@ impl Workspace {
         }
         match command {
             Command::JoinWorkspace => Ok(Decision::default()),
+            Command::RestoreChronologicalOrder => {
+                if actor.role != Role::Owner {
+                    return Err(KernelError::Forbidden);
+                }
+                Ok(Decision {
+                    changes: vec![Change::OrderRestored {
+                        ids: self.creation_order.clone(),
+                    }],
+                    effect: None,
+                })
+            }
             Command::SetReplyMode { mode } => {
                 if !actor.role.can_execute() {
                     return Err(KernelError::Forbidden);
@@ -430,7 +443,21 @@ impl Workspace {
                 self.collaboration.reply_mode = mode;
                 self.collaboration.mode_explicit = explicit;
             }
+            Change::OrderRestored { ids } => {
+                let positions = ids
+                    .iter()
+                    .enumerate()
+                    .map(|(index, id)| (id.as_str(), index))
+                    .collect::<std::collections::HashMap<_, _>>();
+                self.entries.sort_by_key(|entry| {
+                    positions
+                        .get(entry.id.as_str())
+                        .copied()
+                        .unwrap_or(usize::MAX)
+                });
+            }
             Change::Inserted { entry, after } => {
+                self.creation_order.push(entry.id.clone());
                 let pos = after
                     .and_then(|a| self.entries.iter().position(|e| e.id == a).map(|i| i + 1))
                     .unwrap_or(self.entries.len());

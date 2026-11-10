@@ -78,6 +78,9 @@ export class DeltaClient {
   snapshot(workspace: string): Promise<Snapshot> {
     return this.request(`/workspaces/${encodeURIComponent(workspace)}`);
   }
+  restoreChronologicalOrder(workspace: string): Promise<Receipt> {
+    return this.command(workspace, { type: "restore_chronological_order" });
+  }
   joinWorkspace(workspace: string): Promise<Receipt> {
     return this.command(workspace, { type: "join_workspace" });
   }
@@ -185,7 +188,17 @@ export class DeltaClient {
 export function applyEvent(snapshot: Snapshot, event: Event): void {
   if (event.sequence <= snapshot.cursor) return;
   const c = event.change;
-  if (c.type === "participant_joined" || c.type === "reply_mode_changed") {
+  if (c.type === "order_restored") {
+    const positions = new Map(c.ids.map((id, index) => [id, index]));
+    snapshot.entries.sort(
+      (a, b) =>
+        (positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+        (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+    );
+  } else if (
+    c.type === "participant_joined" ||
+    c.type === "reply_mode_changed"
+  ) {
     snapshot.collaboration ??= {
       reply_mode: "auto",
       mode_explicit: false,

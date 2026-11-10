@@ -201,7 +201,7 @@ impl Workspace {
         actor: &Member,
         id: String,
         text: String,
-        after: Option<String>,
+        _after: Option<String>,
         quotes: Vec<ContextQuote>,
         backend: String,
     ) -> Result<Decision, KernelError> {
@@ -229,7 +229,7 @@ impl Workspace {
                 id: id.clone(),
                 base_revision: 0,
                 text: text.clone(),
-                after,
+                after: None,
                 quotes: quotes.clone(),
             },
         )?;

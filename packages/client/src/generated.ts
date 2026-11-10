@@ -3,6 +3,9 @@ export type Command =
       type: "join_workspace";
     }
   | {
+      type: "restore_chronological_order";
+    }
+  | {
       mode: ReplyMode;
       type: "set_reply_mode";
     }
@@ -83,6 +86,10 @@ export type InteractionResponse =
       type: "cancel";
     };
 export type Change =
+  | {
+      ids: string[];
+      type: "order_restored";
+    }
   | {
       member: string;
       type: "participant_joined";

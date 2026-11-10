@@ -53,6 +53,29 @@ test("collaboration events project into legacy snapshots and repeated joins do n
   });
 });
 
+test("chronology restoration moves existing entries without replacing their contents", () => {
+  const snapshot: Snapshot = {
+    workspace: { id: "w", title: "Work" },
+    cursor: 10,
+    entries: ["first", "third", "second"].map((id) => ({
+      id,
+      author: id,
+      revision: 1,
+      content: { type: "text", text: id },
+    })),
+  };
+  const original = snapshot.entries[1];
+  applyEvent(snapshot, {
+    sequence: 11,
+    change: { type: "order_restored", ids: ["first", "second", "third"] },
+  });
+  assert.deepEqual(
+    snapshot.entries.map((entry) => entry.id),
+    ["first", "second", "third"],
+  );
+  assert.equal(snapshot.entries[2], original);
+});
+
 test("public event projection preserves document order and final session state", () => {
   const snapshot: Snapshot = {
     workspace: { id: "w", title: "Work" },

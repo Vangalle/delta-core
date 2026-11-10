@@ -22,6 +22,29 @@ export function grow(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
   el.style.height = `${Math.max(72, el.scrollHeight)}px`;
 }
+export function placeDocumentChildren(
+  parent: HTMLElement,
+  desired: HTMLElement[],
+): void {
+  for (const [index, element] of desired.entries()) {
+    const current = parent.children[index] ?? null;
+    if (element === current) continue;
+    if (
+      element.parentElement === parent &&
+      element.contains(document.activeElement)
+    ) {
+      const displaced: Element[] = [];
+      for (
+        let sibling: Element | null = current;
+        sibling && sibling !== element;
+        sibling = sibling.nextElementSibling
+      )
+        displaced.push(sibling);
+      const reference = element.nextSibling;
+      for (const sibling of displaced) parent.insertBefore(sibling, reference);
+    } else parent.insertBefore(element, current);
+  }
+}
 export function get<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing element ${id}`);
