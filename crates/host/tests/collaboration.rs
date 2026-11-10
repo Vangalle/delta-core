@@ -1,3 +1,4 @@
+mod common;
 use delta_adapters::{
     AdapterResult,
     agent::{AgentBackend, AgentCommand, AgentConnection},
@@ -18,21 +19,13 @@ async fn reply_receipts_distinguish_real_mentions_from_quoted_text_without_grant
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), dir.path(), "owner").unwrap();
     let owner = service.authenticate("owner").await.unwrap();
-    let editor = service
-        .invite(
-            &owner,
-            InviteMember {
-                name: "Editor".into(),
-                role: Role::Editor,
-            },
-        )
-        .await
-        .unwrap()
-        .member;
     let workspace = service
         .create_workspace(&owner, "Permission receipts".into())
         .await
         .unwrap();
+    let editor = common::invite(&service, &owner, &workspace.id, "Editor", Role::Editor)
+        .await
+        .member;
     let literal = service
         .command(
             &editor,
@@ -51,7 +44,12 @@ async fn reply_receipts_distinguish_real_mentions_from_quoted_text_without_grant
         "permission_required"
     );
     assert_eq!(
-        service.snapshot(&workspace.id).await.unwrap().entries.len(),
+        service
+            .snapshot(&owner, &workspace.id)
+            .await
+            .unwrap()
+            .entries
+            .len(),
         2
     );
     service.shutdown().await;
@@ -73,7 +71,7 @@ async fn native_submissions_validate_quote_origins_before_publishing_or_joining(
         service.command(&owner, &workspace.id, request).await,
         Err(delta_host::ServiceError::NotFound)
     ));
-    let snapshot = service.snapshot(&workspace.id).await.unwrap();
+    let snapshot = service.snapshot(&owner, &workspace.id).await.unwrap();
     assert!(snapshot.entries.is_empty());
     assert!(snapshot.collaboration.participants.is_empty());
     service.shutdown().await;
@@ -83,13 +81,14 @@ async fn native_submissions_validate_quote_origins_before_publishing_or_joining(
 async fn a_configured_quiet_default_also_applies_to_the_untouched_bootstrap_workspace() {
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), dir.path(), "owner").unwrap();
-    let workspace = service.workspaces().await.unwrap().remove(0);
+    let owner = service.authenticate("owner").await.unwrap();
+    let workspace = service.workspaces(&owner).await.unwrap().remove(0);
     let _ = service
         .set_default_reply_mode(ReplyMode::MentionsOnly)
         .await;
     assert_eq!(
         service
-            .snapshot(&workspace.id)
+            .snapshot(&owner, &workspace.id)
             .await
             .unwrap()
             .collaboration
@@ -135,7 +134,12 @@ async fn a_bare_url_containing_agent_text_never_starts_a_backend_in_mention_only
         assert!(receipt.agent_reply.is_none());
     }
     assert_eq!(
-        service.snapshot(&workspace.id).await.unwrap().entries.len(),
+        service
+            .snapshot(&owner, &workspace.id)
+            .await
+            .unwrap()
+            .entries
+            .len(),
         3
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -205,16 +209,8 @@ async fn default_auto_and_shared_mention_only_policy_survive_restart_without_ree
     })
     .await
     .unwrap();
-    let viewer = service
-        .invite(
-            &owner,
-            InviteMember {
-                name: "Observer".into(),
-                role: Role::Viewer,
-            },
-        )
+    let viewer = common::invite(&service, &owner, &w.id, "Observer", Role::Viewer)
         .await
-        .unwrap()
         .member;
     service
         .command(&viewer, &w.id, command(json!({"type":"join_workspace"})))
@@ -225,12 +221,12 @@ async fn default_auto_and_shared_mention_only_policy_survive_restart_without_ree
         .await
         .unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 1);
-    let snapshot = service.snapshot(&w.id).await.unwrap();
+    let snapshot = service.snapshot(&owner, &w.id).await.unwrap();
     assert_eq!(snapshot.collaboration.reply_mode, ReplyMode::MentionsOnly);
     service.shutdown().await;
     drop(service);
     let restored = Service::open(dir.path(), dir.path(), "owner").unwrap();
-    let snapshot = restored.snapshot(&w.id).await.unwrap();
+    let snapshot = restored.snapshot(&owner, &w.id).await.unwrap();
     assert_eq!(snapshot.collaboration.reply_mode, ReplyMode::MentionsOnly);
     assert_eq!(snapshot.collaboration.participants.len(), 2);
     restored
@@ -241,7 +237,15 @@ async fn default_auto_and_shared_mention_only_policy_survive_restart_without_ree
         )
         .await
         .unwrap();
-    assert_eq!(restored.snapshot(&w.id).await.unwrap().entries.len(), 4);
+    assert_eq!(
+        restored
+            .snapshot(&owner, &w.id)
+            .await
+            .unwrap()
+            .entries
+            .len(),
+        4
+    );
     restored.shutdown().await;
 }
 #[tokio::test]
@@ -263,7 +267,7 @@ async fn backend_start_failure_acknowledges_the_already_published_message() {
         receipt.is_ok(),
         "a shared publication must not appear unsent: {receipt:?}"
     );
-    let snapshot = service.snapshot(&w.id).await.unwrap();
+    let snapshot = service.snapshot(&owner, &w.id).await.unwrap();
     assert_eq!(snapshot.entries.len(), 2);
     assert!(matches!(
         &snapshot.entries[1].content,

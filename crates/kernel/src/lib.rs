@@ -1,4 +1,6 @@
 use delta_protocol::*;
+mod access;
+pub use access::workspace_access;
 mod collaboration;
 mod context;
 pub use collaboration::parse_mentions;
@@ -153,6 +155,31 @@ impl Workspace {
     }
 
     pub fn decide(&self, actor: &Member, command: Command) -> Result<Decision, KernelError> {
+        self.decide_scoped(actor, workspace_access(actor, actor.role), command)
+    }
+
+    pub fn decide_scoped(
+        &self,
+        actor: &Member,
+        access: WorkspaceAccess,
+        command: Command,
+    ) -> Result<Decision, KernelError> {
+        let mut effective = actor.clone();
+        effective.role =
+            if access.role.can_execute() && !(access.can_execute && actor.role.can_execute()) {
+                Role::Editor
+            } else {
+                access.role
+            };
+        self.decide_inner(&effective, access.role == Role::Owner, command)
+    }
+
+    fn decide_inner(
+        &self,
+        actor: &Member,
+        owner: bool,
+        command: Command,
+    ) -> Result<Decision, KernelError> {
         if matches!(&command, Command::JoinWorkspace) {
             return Ok(self.join(actor));
         }
@@ -168,7 +195,7 @@ impl Workspace {
         match command {
             Command::JoinWorkspace => Ok(Decision::default()),
             Command::RestoreChronologicalOrder => {
-                if actor.role != Role::Owner {
+                if !owner {
                     return Err(KernelError::Forbidden);
                 }
                 Ok(Decision {
@@ -443,6 +470,7 @@ impl Workspace {
                 self.collaboration.reply_mode = mode;
                 self.collaboration.mode_explicit = explicit;
             }
+            Change::MemberAdded { .. } => {}
             Change::OrderRestored { ids } => {
                 let positions = ids
                     .iter()

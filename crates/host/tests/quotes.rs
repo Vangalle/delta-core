@@ -21,7 +21,7 @@ async fn setup() -> (
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), dir.path(), "owner").unwrap();
     let owner = service.authenticate("owner").await.unwrap();
-    let source = service.workspaces().await.unwrap().remove(0);
+    let source = service.workspaces(&owner).await.unwrap().remove(0);
     service.command(&owner, &source.id, command(json!({"type":"publish_text","id":"source","base_revision":0,"text":"Before QUOTED-CONTEXT after","after":null}))).await.unwrap();
     let target = service
         .create_workspace(&owner, "Destination".into())
@@ -40,11 +40,12 @@ async fn publishing_a_quote_preserves_its_source_snapshot_and_survives_restart()
     service.command(&owner, &target.id, command(json!({"type":"publish_text","id":"response","base_revision":0,"text":"My explanation","after":null,"quotes":[context.clone()]}))).await.unwrap();
     service.command(&owner, &source.id, command(json!({"type":"publish_text","id":"source","base_revision":1,"text":"New shared version","after":null}))).await.unwrap();
     let reopened = Service::open(dir.path(), dir.path(), "owner").unwrap();
-    let snapshot = serde_json::to_value(reopened.snapshot(&target.id).await.unwrap()).unwrap();
+    let snapshot =
+        serde_json::to_value(reopened.snapshot(&owner, &target.id).await.unwrap()).unwrap();
     assert_eq!(snapshot["entries"][0]["quotes"], json!([context]));
     assert_eq!(snapshot["entries"][0]["content"]["text"], "My explanation");
     assert_eq!(
-        reopened.snapshot(&source.id).await.unwrap().entries[0].revision,
+        reopened.snapshot(&owner, &source.id).await.unwrap().entries[0].revision,
         2
     );
 }
@@ -72,7 +73,7 @@ async fn missing_sources_future_revisions_and_unbounded_quotes_are_rejected_with
     }
     assert!(
         service
-            .snapshot(&target.id)
+            .snapshot(&owner, &target.id)
             .await
             .unwrap()
             .entries
@@ -121,7 +122,8 @@ async fn quoted_context_reaches_an_independent_agent_and_is_recorded_for_followu
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 let snapshot =
-                    serde_json::to_value(service.snapshot(&target.id).await.unwrap()).unwrap();
+                    serde_json::to_value(service.snapshot(&owner, &target.id).await.unwrap())
+                        .unwrap();
                 if snapshot["entries"][0]["content"]["status"] == "idle" {
                     break;
                 }
@@ -131,7 +133,8 @@ async fn quoted_context_reaches_an_independent_agent_and_is_recorded_for_followu
         .await
         .unwrap();
     }
-    let snapshot = serde_json::to_value(service.snapshot(&target.id).await.unwrap()).unwrap();
+    let snapshot =
+        serde_json::to_value(service.snapshot(&owner, &target.id).await.unwrap()).unwrap();
     assert_eq!(
         snapshot["entries"][0]["quotes"][0]["quote"],
         "QUOTED-CONTEXT"

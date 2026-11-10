@@ -6,10 +6,10 @@ import {
   type Member,
   type Snapshot,
   type WorkspaceInfo,
-  type Role,
   type ContextQuote,
   type ReplyMode,
 } from "@delta-core/client";
+import { People, showInvitation } from "./people.ts";
 import { TerminalView } from "./terminal.ts";
 import { AgentView } from "./agent.ts";
 import { TextView } from "./text.ts";
@@ -43,6 +43,7 @@ compose.prepend(draftIdentity.element);
 publish.setAttribute("aria-label", "Publish");
 let client: DeltaClient;
 let me: Member;
+let account: Member;
 let members: Member[] = [];
 let workspaces: WorkspaceInfo[] = [];
 let snapshot: Snapshot;
@@ -316,6 +317,23 @@ async function openWorkspace(id: string): Promise<void> {
   views.clear();
   flow.replaceChildren();
   snapshot = next;
+  const access = next.access ?? {
+    role: account.role,
+    can_execute: account.role === "owner" || account.role === "executor",
+  };
+  me = {
+    ...account,
+    role:
+      !access.can_execute &&
+      (access.role === "owner" || access.role === "executor")
+        ? "editor"
+        : access.role,
+  };
+  members = next.members ?? [me];
+  get("member-name").textContent = `${account.name} · ${access.role}`;
+  compose.hidden = me.role === "viewer";
+  ask.hidden = !access.can_execute;
+  clearNotice();
   get("workspace-title").textContent = snapshot.workspace.title;
   get("workspace-breadcrumb").textContent = snapshot.workspace.title;
   const saved = localStorage.getItem(draftKey());
@@ -345,19 +363,10 @@ async function openWorkspace(id: string): Promise<void> {
       (event) => {
         if (current !== subscription) return;
         applyEvent(snapshot, event);
+        members = snapshot.members ?? members;
         renderEntries();
         renderPolicy();
-        if (event.change.type === "participant_joined") {
-          void client
-            .members()
-            .then((nextMembers) => {
-              if (current !== subscription) return;
-              members = nextMembers;
-              renderEntries();
-              updatePalette();
-            })
-            .catch(report);
-        }
+        if (event.change.type === "member_added") updatePalette();
       },
       {
         signal: current.signal,
@@ -381,7 +390,8 @@ get("restore-order").addEventListener("click", () => {
   });
 });
 function renderPolicy(): void {
-  get("workspace-actions").hidden = me.role !== "owner";
+  get("workspace-actions").hidden =
+    (snapshot.access?.role ?? me.role) !== "owner";
   replyMode.value = snapshot.collaboration?.reply_mode ?? "mentions_only";
   replyMode.disabled = me.role !== "owner" && me.role !== "executor";
   replyMode.title = replyMode.disabled
@@ -414,32 +424,48 @@ function renderNavigation(): void {
       },
       "workspace-item",
     );
-    if (workspace.id === snapshot.workspace.id) item.classList.add("active");
+    if (workspace.id === snapshot?.workspace.id) item.classList.add("active");
     list.append(item);
   }
 }
 
 async function connect(token: string): Promise<void> {
   client = new DeltaClient(location.origin, token);
-  me = await client.me();
+  account = await client.me();
+  me = account;
   draftIdentity.update(me.id, me.name);
-  [members, workspaces] = await Promise.all([
-    client.members(),
-    client.workspaces(),
-  ]);
+  workspaces = await client.workspaces();
   sessionStorage.setItem("delta:token", token);
   get("login").hidden = true;
   get("app").hidden = false;
   get("member-name").textContent = `${me.name} · ${me.role}`;
-  get("invite").hidden = me.role !== "owner";
   get<HTMLButtonElement>("new-workspace").disabled = me.role === "viewer";
   compose.hidden = me.role === "viewer";
   ask.hidden = me.role !== "owner" && me.role !== "executor";
   const requested = new URL(location.href).searchParams;
-  await openWorkspace(
-    workspaces.find((w) => w.id === requested.get("workspace"))?.id ??
-      workspaces[0].id,
-  );
+  const target = requested.get("workspace");
+  if (
+    !workspaces.length ||
+    (target && !workspaces.some((workspace) => workspace.id === target))
+  ) {
+    compose.hidden = true;
+    get("workspace-actions").hidden = true;
+    replyMode.disabled = true;
+    get("workspace-title").textContent = target
+      ? "Workspace unavailable"
+      : "No workspaces yet";
+    get("workspace-breadcrumb").textContent = "";
+    get("connection").textContent = "Ready";
+    renderNavigation();
+    if (target)
+      report(
+        new Error(
+          "This workspace is not available to your account. Choose one of your workspaces or ask its owner for an invitation.",
+        ),
+      );
+    return;
+  }
+  await openWorkspace(target ?? workspaces[0].id);
   const source = requested.get("entry");
   if (source && requested.get("workspace") === snapshot.workspace.id)
     await navigateQuote({
@@ -687,27 +713,35 @@ get("login-form").addEventListener("submit", (event) => {
       error instanceof Error ? error.message : String(error);
   });
 });
-const dialog = get<HTMLDialogElement>("invite-dialog");
-get("invite").addEventListener("click", () => {
-  get("invitation-result").hidden = true;
-  get<HTMLTextAreaElement>("invitation-token").value = "";
-  dialog.showModal();
-});
-get("close-invite").addEventListener("click", () => dialog.close());
-get("invite-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  void act(async () => {
-    const invitation = await client.invite({
-      name: get<HTMLInputElement>("invite-name").value,
-      role: get<HTMLSelectElement>("invite-role").value as Role,
-    });
-    get<HTMLTextAreaElement>("invitation-token").value = invitation.token;
-    get("invitation-result").hidden = false;
-    members = await client.members();
-  });
-});
+new People(
+  () => client,
+  () => account,
+  () => snapshot,
+  async () => {
+    workspaces = await client.workspaces();
+    renderNavigation();
+    if (snapshot) {
+      members = await client.members(snapshot.workspace.id);
+      snapshot.members = members;
+      renderEntries();
+      updatePalette();
+    }
+  },
+);
+get("refresh-workspaces").addEventListener(
+  "click",
+  () =>
+    void act(async () => {
+      workspaces = await client.workspaces();
+      if (!snapshot && workspaces.length) await openWorkspace(workspaces[0].id);
+      else renderNavigation();
+    }),
+);
+const invitationToken = new URL(location.href).searchParams.get("invitation");
 const token = sessionStorage.getItem("delta:token");
-if (token)
+if (invitationToken)
+  void showInvitation(invitationToken, connect).catch(report);
+else if (token)
   void connect(token).catch((error) => {
     sessionStorage.removeItem("delta:token");
     get("app").hidden = true;

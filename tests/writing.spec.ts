@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function enter(page: Page, id: string) {
   await page.goto(`/?workspace=${id}`);
@@ -50,8 +51,11 @@ test("Markdown is recognized without any formatting toolbar", async ({
 test("user mentions replace only the trigger and stay private in the current paragraph", async ({
   page,
 }) => {
-  const member = await client.invite({ name: "Inline Person", role: "editor" });
   const w = await client.createWorkspace("Inline mentions");
+  const member = await inviteMember(client, w.id, {
+    name: "Inline Person",
+    role: "editor",
+  });
   await enter(page, w.id);
   const draft = page.getByRole("textbox", {
     name: "Private draft",
@@ -94,8 +98,8 @@ test("long inline names stay inside a narrow document without forcing a new para
   page,
 }) => {
   const name = `User${"x".repeat(85)}`;
-  await client.invite({ name, role: "editor" });
   const w = await client.createWorkspace("Narrow mentions");
+  await inviteMember(client, w.id, { name, role: "editor" });
   await enter(page, w.id);
   await page.setViewportSize({ width: 390, height: 844 });
   const draft = page.getByRole("textbox", {

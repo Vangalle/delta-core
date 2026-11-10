@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 import { pasteMarkdown, sourceShortcut } from "./markdown.ts";
 const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function enter(page: Page, id: string, token = "e2e-owner") {
@@ -15,7 +16,7 @@ test("rich formatting is editable, private until publish, and survives a reload 
   browser,
 }) => {
   const workspace = await client.createWorkspace("Rich writing");
-  const invited = await client.invite({
+  const invited = await inviteMember(client, workspace.id, {
     name: "Rich observer",
     role: "editor",
   });

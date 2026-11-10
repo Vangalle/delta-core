@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function enter(page: Page, workspace: string, token = "e2e-owner") {
   await page.goto(`/?workspace=${workspace}`);
@@ -30,7 +31,7 @@ test("selection plus Space creates a private source-linked quote, not a mutation
     text: "Alpha **selected phrase** Omega.",
     after: null,
   });
-  const invitation = await client.invite({
+  const invitation = await inviteMember(client, workspace.id, {
     name: "Quote observer",
     role: "editor",
   });

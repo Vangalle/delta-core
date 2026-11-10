@@ -267,6 +267,9 @@ pub enum Command {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Change {
+    MemberAdded {
+        member: Member,
+    },
     OrderRestored {
         ids: Vec<String>,
     },
@@ -319,6 +322,10 @@ pub struct WorkspaceInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Snapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<WorkspaceAccess>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<Member>,
     pub workspace: WorkspaceInfo,
     pub cursor: u64,
     pub entries: Vec<Entry>,
@@ -343,6 +350,68 @@ pub struct InviteMember {
 pub struct Invitation {
     pub member: Member,
     pub token: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceAccess {
+    pub role: Role,
+    pub can_execute: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInvitation {
+    pub token: String,
+    pub workspace: WorkspaceInfo,
+    pub role: Role,
+    pub name: String,
+    pub expires_at: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct InvitationPreview {
+    pub workspace: WorkspaceInfo,
+    pub role: Role,
+    pub name: String,
+    pub expires_at: u64,
+}
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptInvitation {
+    pub token: String,
+    pub name: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct AcceptedInvitation {
+    pub member: Member,
+    pub workspace: WorkspaceInfo,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_token: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct Person {
+    pub id: String,
+    pub name: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FriendStatus {
+    Incoming,
+    Outgoing,
+    Friend,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct Friend {
+    pub peer: Person,
+    pub status: FriendStatus,
+}
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FriendTarget {
+    pub member_id: String,
+}
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AddFriend {
+    pub member_id: String,
+    pub role: Role,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -374,6 +443,13 @@ pub struct BackendInfo {
 
 #[derive(JsonSchema)]
 pub struct Contract {
+    pub workspace_invitation: WorkspaceInvitation,
+    pub invitation_preview: InvitationPreview,
+    pub accept_invitation: AcceptInvitation,
+    pub accepted_invitation: AcceptedInvitation,
+    pub friend: Friend,
+    pub friend_target: FriendTarget,
+    pub add_friend: AddFriend,
     pub command: Command,
     pub event: Event,
     pub snapshot: Snapshot,

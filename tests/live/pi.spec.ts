@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { DeltaClient, type Content } from "@delta-core/client";
+import { inviteMember } from "../invitation.ts";
 import { pasteMarkdown } from "../markdown.ts";
 
 async function enter(page: Page, workspace: string, token: string) {
@@ -22,7 +23,7 @@ test("real Pi inference reads a fresh file, shares real collapsible results and 
   ) as { nonce: string };
   const client = new DeltaClient("http://127.0.0.1:47834", "live-owner");
   const workspace = await client.createWorkspace("Real Pi acceptance");
-  const observer = await client.invite({
+  const observer = await inviteMember(client, workspace.id, {
     name: "Live observer",
     role: "editor",
   });

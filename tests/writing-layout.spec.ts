@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 import { pasteMarkdown } from "./markdown.ts";
 test("author gutters align with the first content line and remain usable on narrow screens", async ({
   page,
@@ -8,7 +9,10 @@ test("author gutters align with the first content line and remain usable on narr
   for (let i = 0; i < 10; i++)
     await client.createWorkspace(`Navigation workspace ${i}`);
   const w = await client.createWorkspace("Continuous shared writing");
-  const person = await client.invite({ name: "Lin", role: "editor" });
+  const person = await inviteMember(client, w.id, {
+    name: "Lin",
+    role: "editor",
+  });
   const second = new DeltaClient("http://127.0.0.1:47832", person.token);
   await client.command(w.id, {
     type: "publish_text",

@@ -1,3 +1,4 @@
+export type Role = "owner" | "executor" | "editor" | "viewer";
 export type Command =
   | {
       type: "join_workspace";
@@ -86,6 +87,10 @@ export type InteractionResponse =
       type: "cancel";
     };
 export type Change =
+  | {
+      member: Member;
+      type: "member_added";
+    }
   | {
       ids: string[];
       type: "order_restored";
@@ -221,21 +226,50 @@ export type Activity =
     };
 export type InteractionKind = "confirm" | "select" | "input" | "editor";
 export type MentionKind = "user" | "agent";
-export type Role = "owner" | "executor" | "editor" | "viewer";
+export type FriendStatus = "incoming" | "outgoing" | "friend";
 export type AgentReplyOutcome = "queued" | "permission_required" | "failed";
 
 export interface Contract {
+  accept_invitation: AcceptInvitation;
+  accepted_invitation: AcceptedInvitation;
+  add_friend: AddFriend;
   backend: BackendInfo;
   command: Command;
   create_workspace: CreateWorkspace;
   error: ApiError;
   event: Event;
+  friend: Friend;
+  friend_target: FriendTarget;
   invitation: Invitation;
+  invitation_preview: InvitationPreview;
   invite_member: InviteMember;
   member: Member;
   receipt: Receipt;
   snapshot: Snapshot;
   workspace_info: WorkspaceInfo;
+  workspace_invitation: WorkspaceInvitation;
+}
+export interface AcceptInvitation {
+  name: string;
+  token: string;
+}
+export interface AcceptedInvitation {
+  login_token?: string | null;
+  member: Member;
+  workspace: WorkspaceInfo;
+}
+export interface Member {
+  id: string;
+  name: string;
+  role: Role;
+}
+export interface WorkspaceInfo {
+  id: string;
+  title: string;
+}
+export interface AddFriend {
+  member_id: string;
+  role: Role;
 }
 export interface BackendInfo {
   id: string;
@@ -273,14 +307,26 @@ export interface Mention {
   label: string;
   target: string;
 }
+export interface Friend {
+  peer: Person;
+  status: FriendStatus;
+}
+export interface Person {
+  id: string;
+  name: string;
+}
+export interface FriendTarget {
+  member_id: string;
+}
 export interface Invitation {
   member: Member;
   token: string;
 }
-export interface Member {
-  id: string;
+export interface InvitationPreview {
+  expires_at: number;
   name: string;
   role: Role;
+  workspace: WorkspaceInfo;
 }
 export interface InviteMember {
   name: string;
@@ -291,17 +337,26 @@ export interface Receipt {
   cursor: number;
 }
 export interface Snapshot {
+  access?: WorkspaceAccess | null;
   collaboration?: Collaboration;
   cursor: number;
   entries: Entry[];
+  members?: Member[];
   workspace: WorkspaceInfo;
+}
+export interface WorkspaceAccess {
+  can_execute: boolean;
+  role: Role;
 }
 export interface Collaboration {
   mode_explicit: boolean;
   participants: string[];
   reply_mode: ReplyMode;
 }
-export interface WorkspaceInfo {
-  id: string;
-  title: string;
+export interface WorkspaceInvitation {
+  expires_at: number;
+  name: string;
+  role: Role;
+  token: string;
+  workspace: WorkspaceInfo;
 }

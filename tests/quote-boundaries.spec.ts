@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function enter(page: Page, id: string, token = "e2e-owner") {
   await page.goto(`/?workspace=${id}`);
@@ -141,7 +142,7 @@ test("observers cannot turn selections into editable drafts", async ({
     text: "Observer-visible content",
     after: null,
   });
-  const invitation = await client.invite({
+  const invitation = await inviteMember(client, workspace.id, {
     name: "Read-only observer",
     role: "viewer",
   });

@@ -19,7 +19,7 @@
           type="password"
           autocomplete="off"
           spellcheck="false"
-          placeholder="Paste your host or invitation token"
+          placeholder="Paste your member login token"
           required
         />
         <button class="primary" type="submit">Enter workspace</button>
@@ -45,11 +45,18 @@
           >
             +
           </button>
+          <button
+            id="refresh-workspaces"
+            class="icon-button"
+            aria-label="Refresh workspaces"
+          >
+            ↻
+          </button>
         </div>
         <nav id="workspace-list" aria-label="Workspaces"></nav>
         <div class="sidebar-bottom">
           <span class="host-dot"></span> Single execution host
-          <button id="invite" class="subtle" hidden>Invite</button>
+          <button id="friends" class="subtle">Friends</button>
         </div>
       </aside>
       <main>
@@ -68,6 +75,7 @@
                 ⋯
               </summary>
               <div class="workspace-action-items">
+                <button id="invite" type="button">Invite</button>
                 <button id="restore-order" type="button">
                   Restore chronological order
                 </button>
@@ -125,33 +133,97 @@
       </main>
     </div>
     <dialog id="invite-dialog">
+      <h2 id="invite-title">Workspace members</h2>
+      <p>Access applies only to this workspace, not the whole Host.</p>
+      <h3>Members</h3>
+      <div id="workspace-members"></div>
+      <h3>Add a friend</h3>
+      <div id="workspace-friends"></div>
       <form id="invite-form">
-        <h2>Invite a collaborator</h2>
-        <p>Members can access all workspaces on this host.</p>
-        <label>Name<input id="invite-name" required maxlength="100" /></label
-        ><label
-          >Access<select id="invite-role">
+        <h3>Invite someone new</h3>
+        <label
+          >Guest name<input id="invite-name" required maxlength="100"
+        /></label>
+        <label
+          >Workspace access<select id="invite-role">
             <option value="editor">Editor · publish text</option>
             <option value="viewer">Observer · read only</option>
-            <option value="executor">Executor · can run host code</option>
+            <option id="invite-executor" value="executor">
+              Executor · can run host code
+            </option>
           </select></label
         >
         <p class="warning">
-          Execution access is not sandboxed. Only grant it to people you trust.
+          Execution is not sandboxed. Ordinary invitations and adding friends
+          never grant Host execution.
         </p>
-        <div class="dialog-actions">
-          <button id="close-invite" type="button" class="subtle">Close</button
-          ><button type="submit" class="primary">Create invitation</button>
+        <button type="submit" class="primary">Create invitation</button>
+        <div id="invitation-result" hidden>
+          <label
+            >Invitation link<textarea
+              id="invitation-token"
+              readonly
+              rows="3"
+            ></textarea></label
+          ><small
+            >Share privately. One use, valid for seven days. This is not a login
+            credential.</small
+          >
         </div>
-        <label id="invitation-result" hidden
-          >Share this token privately<textarea
-            id="invitation-token"
-            readonly
-            rows="3"
-          ></textarea>
-        </label>
       </form>
+      <p id="invite-error" class="error" role="status"></p>
+      <div class="dialog-actions">
+        <button id="close-invite" type="button" class="subtle">Close</button>
+      </div>
     </dialog>
+    <dialog id="friends-dialog">
+      <h2>Friends</h2>
+      <p>Both people must confirm. Friendship does not open any workspace.</p>
+      <label>Your friend code<input id="friend-own-code" readonly /></label>
+      <details>
+        <summary>Save your login credential</summary>
+        <p>
+          Save privately to sign in again after closing this tab. Never share it
+          as a friend code.
+        </p>
+        <label
+          >Your login token<input
+            id="own-login-token"
+            type="password"
+            readonly
+            autocomplete="off" /></label
+        ><button id="show-login-token" type="button">Show login token</button>
+      </details>
+      <form id="friend-form">
+        <label
+          >Friend code<input id="friend-code" required maxlength="128" /></label
+        ><button type="submit">Send request</button>
+      </form>
+      <div id="friends-list"></div>
+      <p id="friends-error" class="error" role="status"></p>
+      <div class="dialog-actions">
+        <button id="refresh-friends" type="button">Refresh friends</button
+        ><button id="close-friends" type="button">Close friends</button>
+      </div>
+    </dialog>
+    <section id="invitation-landing" class="login-screen" hidden>
+      <div class="login-form">
+        <h1 id="invitation-heading">Invitation</h1>
+        <p id="invitation-access"></p>
+        <p id="invitation-identity"></p>
+        <form id="accept-invitation-form">
+          <label
+            >Your name<input id="accept-name" maxlength="100" required /></label
+          ><button id="accept-invitation" type="submit" class="primary">
+            Accept invitation</button
+          ><button id="invitation-new-identity" type="button" hidden>
+            Use a new identity
+          </button>
+        </form>
+        <p id="invitation-error" class="error" role="status"></p>
+        <a href="/">Sign in with a member token</a>
+      </div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 async function enter(page: Page, workspace: string, token: string) {
   await page.goto(`/?workspace=${workspace}`);
   await page.getByLabel("Member token").fill(token);
@@ -14,7 +15,7 @@ test("Pi confirmations can be declined by the controller but not by other execut
 }) => {
   const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
   const workspace = await client.createWorkspace("Agent confirmations");
-  const invitation = await client.invite({
+  const invitation = await inviteMember(client, workspace.id, {
     name: "Other executor",
     role: "executor",
   });

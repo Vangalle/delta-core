@@ -82,7 +82,32 @@
   line-height: 1.8;
   margin-top: 24px;
 }
+.person-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.person-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.person-row small,
+.muted {
+  color: var(--muted);
+  font-size: 11px;
+}
+dialog h3 {
+  margin: 24px 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
 dialog {
+  max-height: 85dvh;
+  overflow-y: auto;
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line);

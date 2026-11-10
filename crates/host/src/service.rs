@@ -1,4 +1,6 @@
 use crate::auth;
+mod access;
+use access::{authorize, shared_reference};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use delta_adapters::{
     agent::{AgentBackend, AgentCommand},
@@ -21,6 +23,7 @@ pub enum ServiceError {
     Forbidden,
     NotFound,
     Conflict,
+    MembershipConflict,
     Invalid,
     Unavailable,
     Internal,
@@ -86,10 +89,12 @@ fn published_context(state: &State, id: &str, include_references: bool) -> Strin
                 kind: ReferenceKind::Thread,
                 target,
                 label,
-            } if include_references && target != id => Some(format!(
-                "Referenced workspace {label} ({target}):\n{}",
-                published_context(state, target, false)
-            )),
+            } if include_references && target != id && shared_reference(state, id, target) => {
+                Some(format!(
+                    "Referenced workspace {label} ({target}):\n{}",
+                    published_context(state, target, false)
+                ))
+            }
             Content::Reference {
                 kind: ReferenceKind::User,
                 label,
@@ -99,6 +104,21 @@ fn published_context(state: &State, id: &str, include_references: bool) -> Strin
         })
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+pub struct Subscription {
+    workspace: String,
+    receiver: broadcast::Receiver<(String, Event)>,
+}
+impl Subscription {
+    pub async fn recv(&mut self) -> Result<(String, Event), broadcast::error::RecvError> {
+        loop {
+            let event = self.receiver.recv().await?;
+            if event.0 == self.workspace {
+                return Ok(event);
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -134,6 +154,7 @@ impl Service {
                 })
                 .map_err(internal)?;
         }
+        journal.migrate_workspace_access().map_err(internal)?;
         let mut workspaces = HashMap::new();
         let mut cursors = HashMap::new();
         for info in journal.workspaces().map_err(internal)? {
@@ -239,43 +260,24 @@ impl Service {
             .ok_or(ServiceError::Unauthorized)
     }
 
-    pub async fn members(&self) -> Result<Vec<Member>, ServiceError> {
-        self.state.lock().await.journal.members().map_err(internal)
+    pub async fn members(&self, actor: &Member, id: &str) -> Result<Vec<Member>, ServiceError> {
+        let s = self.state.lock().await;
+        authorize(&s, actor, id)?;
+        s.journal.workspace_members(id).map_err(internal)
     }
 
-    pub async fn invite(
-        &self,
-        actor: &Member,
-        invite: InviteMember,
-    ) -> Result<Invitation, ServiceError> {
-        if actor.role != Role::Owner {
-            return Err(ServiceError::Forbidden);
-        }
-        if invite.name.trim().is_empty() || invite.name.len() > 100 || invite.role == Role::Owner {
-            return Err(ServiceError::Invalid);
-        }
-        let member = Member {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: invite.name,
-            role: invite.role,
-        };
-        let token = auth::token();
-        self.state
-            .lock()
-            .await
-            .journal
-            .add_member(&member, &auth::hash(&token))
-            .map_err(internal)?;
-        Ok(Invitation { member, token })
-    }
-
-    pub async fn workspaces(&self) -> Result<Vec<WorkspaceInfo>, ServiceError> {
-        self.state
-            .lock()
-            .await
-            .journal
+    pub async fn workspaces(&self, actor: &Member) -> Result<Vec<WorkspaceInfo>, ServiceError> {
+        let s = self.state.lock().await;
+        s.journal
             .workspaces()
-            .map_err(internal)
+            .map_err(internal)?
+            .into_iter()
+            .filter_map(|w| match s.journal.workspace_role(&w.id, &actor.id) {
+                Ok(Some(_)) => Some(Ok(w)),
+                Ok(None) => None,
+                Err(e) => Some(Err(internal(e))),
+            })
+            .collect()
     }
 
     pub async fn create_workspace(
@@ -294,7 +296,9 @@ impl Service {
             title,
         };
         let mut s = self.state.lock().await;
-        s.journal.create_workspace(&info).map_err(internal)?;
+        s.journal
+            .create_scoped_workspace(&info, &actor.id)
+            .map_err(internal)?;
         s.workspaces.insert(
             info.id.clone(),
             Workspace::new(info.id.clone(), info.title.clone()),
@@ -326,10 +330,13 @@ impl Service {
             .collect()
     }
 
-    pub async fn snapshot(&self, id: &str) -> Result<Snapshot, ServiceError> {
+    pub async fn snapshot(&self, actor: &Member, id: &str) -> Result<Snapshot, ServiceError> {
         let s = self.state.lock().await;
+        let access = authorize(&s, actor, id)?;
         let workspace = s.workspaces.get(id).ok_or(ServiceError::NotFound)?;
         Ok(Snapshot {
+            access: Some(access),
+            members: s.journal.workspace_members(id).map_err(internal)?,
             workspace: workspace.info.clone(),
             cursor: *s.cursors.get(id).unwrap_or(&0),
             entries: workspace.entries.clone(),
@@ -339,22 +346,36 @@ impl Service {
 
     pub async fn subscribe(
         &self,
+        actor: &Member,
         id: &str,
         after: u64,
-    ) -> Result<(Vec<Event>, broadcast::Receiver<(String, Event)>), ServiceError> {
+    ) -> Result<(Vec<Event>, Subscription), ServiceError> {
         let s = self.state.lock().await;
-        if !s.workspaces.contains_key(id) {
-            return Err(ServiceError::NotFound);
-        }
+        authorize(&s, actor, id)?;
         if after > *s.cursors.get(id).unwrap_or(&0) {
             return Err(ServiceError::Conflict);
         }
         let receiver = self.events.subscribe();
-        Ok((s.journal.load(id, after).map_err(internal)?, receiver))
+        Ok((
+            s.journal.load(id, after).map_err(internal)?,
+            Subscription {
+                workspace: id.into(),
+                receiver,
+            },
+        ))
     }
 
     fn commit(&self, s: &mut State, id: &str, changes: &[Change]) -> Result<u64, ServiceError> {
         let events = s.journal.append(id, changes).map_err(internal)?;
+        self.project_events(s, id, events)
+    }
+
+    fn project_events(
+        &self,
+        s: &mut State,
+        id: &str,
+        events: Vec<Event>,
+    ) -> Result<u64, ServiceError> {
         for event in events {
             s.workspaces
                 .get_mut(id)
@@ -380,6 +401,7 @@ impl Service {
         command: Command,
     ) -> Result<Receipt, ServiceError> {
         let mut s = self.state.lock().await;
+        let access = authorize(&s, actor, id)?;
         let submission = matches!(&command, Command::SubmitMessage { .. });
         let explicit_request = match &command {
             Command::SubmitMessage { text, backend, .. } => {
@@ -390,7 +412,7 @@ impl Service {
             _ => false,
         };
         if let Command::SubmitMessage { text, backend, .. } = &command {
-            let members = s.journal.members().map_err(internal)?;
+            let members = s.journal.workspace_members(id).map_err(internal)?;
             if delta_kernel::parse_mentions(text, backend)
                 .iter()
                 .any(|mention| {
@@ -403,10 +425,10 @@ impl Service {
         }
         if let Command::InsertReference { kind, target, .. } = &command {
             let exists = match kind {
-                ReferenceKind::Thread => s.workspaces.contains_key(target),
+                ReferenceKind::Thread => authorize(&s, actor, target).is_ok(),
                 ReferenceKind::User => s
                     .journal
-                    .members()
+                    .workspace_members(id)
                     .map_err(internal)?
                     .iter()
                     .any(|m| &m.id == target),
@@ -427,6 +449,7 @@ impl Service {
         {
             delta_kernel::validate_quotes(quotes)?;
             for quote in quotes {
+                authorize(&s, actor, &quote.workspace_id)?;
                 let source = s
                     .workspaces
                     .get(&quote.workspace_id)
@@ -442,7 +465,7 @@ impl Service {
             .workspaces
             .get(id)
             .ok_or(ServiceError::NotFound)?
-            .decide(actor, command)?;
+            .decide_scoped(actor, access, command)?;
         let submitted_agent = if submission {
             match &decision.effect {
                 Some(Effect::PromptAgent { id, backend, .. }) => {
@@ -458,7 +481,7 @@ impl Service {
         };
         let mut agent_reply = if submitted_agent.is_some() {
             Some(AgentReplyOutcome::Queued)
-        } else if submission && explicit_request && !actor.role.can_execute() {
+        } else if submission && explicit_request && !access.can_execute {
             Some(AgentReplyOutcome::PermissionRequired)
         } else {
             None

@@ -4,7 +4,8 @@ use rusqlite::{Connection, params};
 use std::path::Path;
 
 pub struct Journal {
-    connection: Connection,
+    pub(crate) connection: Connection,
+    pub(crate) path: std::path::PathBuf,
 }
 
 impl Journal {
@@ -15,7 +16,12 @@ impl Journal {
             CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT, workspace TEXT NOT NULL REFERENCES workspaces(id), change_json TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS events_workspace ON events(workspace, sequence);
             CREATE TABLE IF NOT EXISTS members(id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE);")?;
-        Ok(Self { connection })
+        let journal = Self {
+            connection,
+            path: path.to_path_buf(),
+        };
+        journal.init_access_schema()?;
+        Ok(journal)
     }
 
     pub fn create_workspace(&self, info: &WorkspaceInfo) -> AdapterResult<()> {

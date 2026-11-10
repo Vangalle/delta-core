@@ -65,14 +65,25 @@ async fn anonymous_access_and_ungranted_execution_are_rejected() {
         request(
             &app,
             "POST",
-            "/api/v1/members",
+            &format!("/api/v1/workspaces/{id}/invitations"),
             Some("owner-secret"),
             Some(json!({"name":"Bob","role":"editor"})),
         )
         .await,
     )
     .await;
-    let token = invite["token"].as_str().unwrap();
+    let accepted = json_body(
+        request(
+            &app,
+            "POST",
+            "/api/v1/invitations/accept",
+            None,
+            Some(json!({"token":invite["token"],"name":"Bob"})),
+        )
+        .await,
+    )
+    .await;
+    let token = accepted["login_token"].as_str().unwrap();
     let path = format!("/api/v1/workspaces/{id}/commands");
     assert_eq!(
         request(
@@ -90,7 +101,7 @@ async fn anonymous_access_and_ungranted_execution_are_rejected() {
         request(
             &app,
             "POST",
-            "/api/v1/members",
+            &format!("/api/v1/workspaces/{id}/invitations"),
             Some(token),
             Some(json!({"name":"Mallory","role":"executor"}))
         )
@@ -143,7 +154,10 @@ async fn stale_publication_is_conflict_and_shared_content_survives_restart() {
         StatusCode::CONFLICT
     );
     let reopened = Service::open(dir.path(), dir.path(), "owner-secret").unwrap();
-    let snapshot = reopened.snapshot(&id).await.unwrap();
+    let snapshot = reopened
+        .snapshot(&reopened.authenticate("owner-secret").await.unwrap(), &id)
+        .await
+        .unwrap();
     assert_eq!(
         serde_json::to_value(&snapshot).unwrap()["entries"][0]["content"]["text"],
         "published"
@@ -158,7 +172,10 @@ async fn subscriber_replays_only_events_after_its_cursor() {
     for (revision, text) in [(0, "one"), (1, "two")] {
         assert_eq!(request(&app,"POST",&path,Some("owner-secret"),Some(json!({"type":"publish_text","id":"a","base_revision":revision,"text":text,"after":null}))).await.status(), StatusCode::OK);
     }
-    let (events, mut rx) = service.subscribe(&id, 1).await.unwrap();
+    let (events, mut rx) = service
+        .subscribe(&service.authenticate("owner-secret").await.unwrap(), &id, 1)
+        .await
+        .unwrap();
     assert_eq!(events.iter().map(|e| e.sequence).collect::<Vec<_>>(), [2]);
     request(
         &app,
@@ -208,7 +225,13 @@ async fn restart_marks_prior_terminal_interrupted_without_rerunning_it() {
         StatusCode::OK
     );
     let reopened = Service::open(dir.path(), dir.path(), "owner-secret").unwrap();
-    let snapshot = serde_json::to_value(reopened.snapshot(&id).await.unwrap()).unwrap();
+    let snapshot = serde_json::to_value(
+        reopened
+            .snapshot(&reopened.authenticate("owner-secret").await.unwrap(), &id)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(snapshot["entries"][0]["content"]["status"], "interrupted");
     request(
         &app,

@@ -40,6 +40,11 @@ impl IntoResponse for ServiceError {
                 "conflict",
                 "The shared content changed. Your local draft must be reconciled before publishing",
             ),
+            Self::MembershipConflict => (
+                StatusCode::CONFLICT,
+                "membership_exists",
+                "This account is already a member with a different role; adding a friend does not change existing permissions",
+            ),
             Self::Invalid => (
                 StatusCode::BAD_REQUEST,
                 "invalid_command",
@@ -79,7 +84,16 @@ async fn member(service: &Service, headers: &HeaderMap) -> Result<Member, Servic
 pub fn router(service: Service, assets: Option<PathBuf>) -> Router {
     let mut router = Router::new()
         .route("/api/v1/me", get(me))
-        .route("/api/v1/members", get(members).post(invite))
+        .route(
+            "/api/v1/workspaces/{id}/members",
+            get(members).post(add_friend),
+        )
+        .route("/api/v1/workspaces/{id}/invitations", post(invite))
+        .route("/api/v1/invitations/{token}", get(invitation_preview))
+        .route("/api/v1/invitations/accept", post(accept_invitation))
+        .route("/api/v1/friends", get(friends))
+        .route("/api/v1/friends/request", post(request_friend))
+        .route("/api/v1/friends/accept", post(accept_friend))
         .route("/api/v1/backends", get(backends))
         .route("/api/v1/workspaces", get(workspaces).post(create_workspace))
         .route("/api/v1/workspaces/{id}", get(snapshot))
@@ -105,17 +119,69 @@ async fn me(State(s): State<Service>, headers: HeaderMap) -> Result<Json<Member>
 async fn members(
     State(s): State<Service>,
     headers: HeaderMap,
+    Path(id): Path<String>,
 ) -> Result<Json<Vec<Member>>, ServiceError> {
-    member(&s, &headers).await?;
-    Ok(Json(s.members().await?))
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.members(&actor, &id).await?))
 }
 async fn invite(
     State(s): State<Service>,
     headers: HeaderMap,
+    Path(id): Path<String>,
     Json(body): Json<InviteMember>,
-) -> Result<Json<Invitation>, ServiceError> {
+) -> Result<Json<WorkspaceInvitation>, ServiceError> {
     let actor = member(&s, &headers).await?;
-    Ok(Json(s.invite(&actor, body).await?))
+    Ok(Json(s.create_invitation(&actor, &id, body).await?))
+}
+async fn invitation_preview(
+    State(s): State<Service>,
+    Path(token): Path<String>,
+) -> Result<Json<InvitationPreview>, ServiceError> {
+    Ok(Json(s.invitation_preview(&token).await?))
+}
+async fn accept_invitation(
+    State(s): State<Service>,
+    headers: HeaderMap,
+    Json(body): Json<AcceptInvitation>,
+) -> Result<Json<AcceptedInvitation>, ServiceError> {
+    let actor = if headers.contains_key(header::AUTHORIZATION) {
+        Some(member(&s, &headers).await?)
+    } else {
+        None
+    };
+    Ok(Json(s.accept_invitation(actor.as_ref(), body).await?))
+}
+async fn friends(
+    State(s): State<Service>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<Friend>>, ServiceError> {
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.friends(&actor).await?))
+}
+async fn request_friend(
+    State(s): State<Service>,
+    headers: HeaderMap,
+    Json(body): Json<FriendTarget>,
+) -> Result<Json<Vec<Friend>>, ServiceError> {
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.request_friend(&actor, body).await?))
+}
+async fn accept_friend(
+    State(s): State<Service>,
+    headers: HeaderMap,
+    Json(body): Json<FriendTarget>,
+) -> Result<Json<Vec<Friend>>, ServiceError> {
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.accept_friend(&actor, body).await?))
+}
+async fn add_friend(
+    State(s): State<Service>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<AddFriend>,
+) -> Result<Json<Receipt>, ServiceError> {
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.add_friend(&actor, &id, body).await?))
 }
 async fn backends(
     State(s): State<Service>,
@@ -128,8 +194,8 @@ async fn workspaces(
     State(s): State<Service>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<WorkspaceInfo>>, ServiceError> {
-    member(&s, &headers).await?;
-    Ok(Json(s.workspaces().await?))
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.workspaces(&actor).await?))
 }
 async fn create_workspace(
     State(s): State<Service>,
@@ -144,8 +210,8 @@ async fn snapshot(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Snapshot>, ServiceError> {
-    member(&s, &headers).await?;
-    Ok(Json(s.snapshot(&id).await?))
+    let actor = member(&s, &headers).await?;
+    Ok(Json(s.snapshot(&actor, &id).await?))
 }
 async fn command(
     State(s): State<Service>,
@@ -169,12 +235,13 @@ async fn events(
     Path(id): Path<String>,
     Query(query): Query<Cursor>,
 ) -> Result<Response, ServiceError> {
-    member(&s, &headers).await?;
-    let (replay, mut receiver) = s.subscribe(&id, query.after).await?;
+    let actor = member(&s, &headers).await?;
+    let (replay, mut receiver) = s.subscribe(&actor, &id, query.after).await?;
     let mut stopping = s.stopping();
     let stream = async_stream::stream! {
         let mut cursor=query.after;
         for event in replay {
+            if s.check_access(&actor,&id).await.is_err(){break;}
             cursor=event.sequence;
             yield Ok::<_,Infallible>(SseEvent::default().id(cursor.to_string()).json_data(&event).unwrap());
         }
@@ -186,15 +253,16 @@ async fn events(
             };
             match received {
                 Ok((workspace,event)) if workspace==id && event.sequence>cursor => {
+                    if s.check_access(&actor,&id).await.is_err(){break;}
                     cursor=event.sequence;
                     yield Ok(SseEvent::default().id(cursor.to_string()).json_data(&event).unwrap());
                 }
                 Ok(_) => {},
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                    match s.subscribe(&id,cursor).await {
+                    match s.subscribe(&actor,&id,cursor).await {
                         Ok((missed,next)) => {
                             receiver=next;
-                            for event in missed { cursor=event.sequence; yield Ok(SseEvent::default().id(cursor.to_string()).json_data(&event).unwrap()); }
+                            for event in missed { if s.check_access(&actor,&id).await.is_err(){return;} cursor=event.sequence; yield Ok(SseEvent::default().id(cursor.to_string()).json_data(&event).unwrap()); }
                         }
                         Err(_) => break,
                     }

@@ -7,7 +7,8 @@ use tower::ServiceExt;
 async fn host_shutdown_terminates_live_event_streams() {
     let dir = tempfile::tempdir().unwrap();
     let service = Service::open(dir.path(), dir.path(), "owner").unwrap();
-    let workspace = service.workspaces().await.unwrap().remove(0);
+    let owner = service.authenticate("owner").await.unwrap();
+    let workspace = service.workspaces(&owner).await.unwrap().remove(0);
     let response = router(service.clone(), None)
         .oneshot(
             Request::builder()

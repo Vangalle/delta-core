@@ -3,6 +3,15 @@
   "title": "Contract",
   "type": "object",
   "properties": {
+    "accept_invitation": {
+      "$ref": "#/$defs/AcceptInvitation"
+    },
+    "accepted_invitation": {
+      "$ref": "#/$defs/AcceptedInvitation"
+    },
+    "add_friend": {
+      "$ref": "#/$defs/AddFriend"
+    },
     "backend": {
       "$ref": "#/$defs/BackendInfo"
     },
@@ -18,8 +27,17 @@
     "event": {
       "$ref": "#/$defs/Event"
     },
+    "friend": {
+      "$ref": "#/$defs/Friend"
+    },
+    "friend_target": {
+      "$ref": "#/$defs/FriendTarget"
+    },
     "invitation": {
       "$ref": "#/$defs/Invitation"
+    },
+    "invitation_preview": {
+      "$ref": "#/$defs/InvitationPreview"
     },
     "invite_member": {
       "$ref": "#/$defs/InviteMember"
@@ -35,9 +53,19 @@
     },
     "workspace_info": {
       "$ref": "#/$defs/WorkspaceInfo"
+    },
+    "workspace_invitation": {
+      "$ref": "#/$defs/WorkspaceInvitation"
     }
   },
   "required": [
+    "workspace_invitation",
+    "invitation_preview",
+    "accept_invitation",
+    "accepted_invitation",
+    "friend",
+    "friend_target",
+    "add_friend",
     "command",
     "event",
     "snapshot",
@@ -51,6 +79,43 @@
     "backend"
   ],
   "$defs": {
+    "AcceptInvitation": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "token",
+        "name"
+      ]
+    },
+    "AcceptedInvitation": {
+      "type": "object",
+      "properties": {
+        "login_token": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "member": {
+          "$ref": "#/$defs/Member"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceInfo"
+        }
+      },
+      "required": [
+        "member",
+        "workspace"
+      ]
+    },
     "Activity": {
       "oneOf": [
         {
@@ -308,6 +373,22 @@
         }
       ]
     },
+    "AddFriend": {
+      "type": "object",
+      "properties": {
+        "member_id": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "member_id",
+        "role"
+      ]
+    },
     "AgentReplyOutcome": {
       "type": "string",
       "enum": [
@@ -348,6 +429,22 @@
     },
     "Change": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "member": {
+              "$ref": "#/$defs/Member"
+            },
+            "type": {
+              "type": "string",
+              "const": "member_added"
+            }
+          },
+          "required": [
+            "type",
+            "member"
+          ]
+        },
         {
           "type": "object",
           "properties": {
@@ -1094,6 +1191,41 @@
         "change"
       ]
     },
+    "Friend": {
+      "type": "object",
+      "properties": {
+        "peer": {
+          "$ref": "#/$defs/Person"
+        },
+        "status": {
+          "$ref": "#/$defs/FriendStatus"
+        }
+      },
+      "required": [
+        "peer",
+        "status"
+      ]
+    },
+    "FriendStatus": {
+      "type": "string",
+      "enum": [
+        "incoming",
+        "outgoing",
+        "friend"
+      ]
+    },
+    "FriendTarget": {
+      "type": "object",
+      "properties": {
+        "member_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "member_id"
+      ]
+    },
     "InteractionKind": {
       "type": "string",
       "enum": [
@@ -1169,6 +1301,31 @@
         "token"
       ]
     },
+    "InvitationPreview": {
+      "type": "object",
+      "properties": {
+        "expires_at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceInfo"
+        }
+      },
+      "required": [
+        "workspace",
+        "role",
+        "name",
+        "expires_at"
+      ]
+    },
     "InviteMember": {
       "type": "object",
       "properties": {
@@ -1230,6 +1387,21 @@
         "agent"
       ]
     },
+    "Person": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
     "Receipt": {
       "type": "object",
       "properties": {
@@ -1289,6 +1461,16 @@
     "Snapshot": {
       "type": "object",
       "properties": {
+        "access": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceAccess"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "collaboration": {
           "$ref": "#/$defs/Collaboration",
           "default": {
@@ -1308,6 +1490,12 @@
             "$ref": "#/$defs/Entry"
           }
         },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Member"
+          }
+        },
         "workspace": {
           "$ref": "#/$defs/WorkspaceInfo"
         }
@@ -1316,6 +1504,21 @@
         "workspace",
         "cursor",
         "entries"
+      ]
+    },
+    "WorkspaceAccess": {
+      "type": "object",
+      "properties": {
+        "can_execute": {
+          "type": "boolean"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "required": [
+        "role",
+        "can_execute"
       ]
     },
     "WorkspaceInfo": {
@@ -1331,6 +1534,35 @@
       "required": [
         "id",
         "title"
+      ]
+    },
+    "WorkspaceInvitation": {
+      "type": "object",
+      "properties": {
+        "expires_at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "token": {
+          "type": "string"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceInfo"
+        }
+      },
+      "required": [
+        "token",
+        "workspace",
+        "role",
+        "name",
+        "expires_at"
       ]
     }
   }

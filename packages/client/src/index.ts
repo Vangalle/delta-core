@@ -4,7 +4,12 @@ import type {
   Snapshot,
   Member,
   WorkspaceInfo,
-  Invitation,
+  WorkspaceInvitation,
+  InvitationPreview,
+  AcceptInvitation,
+  AcceptedInvitation,
+  Friend,
+  Role,
   InviteMember,
   Receipt,
   BackendInfo,
@@ -47,7 +52,7 @@ export class DeltaClient {
     const response = await fetch(`${this.base}/api/v1${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${this.token}`,
+        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -60,11 +65,41 @@ export class DeltaClient {
   me(): Promise<Member> {
     return this.request("/me");
   }
-  members(): Promise<Member[]> {
-    return this.request("/members");
+  members(workspace: string): Promise<Member[]> {
+    return this.request(`/workspaces/${encodeURIComponent(workspace)}/members`);
   }
-  invite(body: InviteMember): Promise<Invitation> {
-    return this.request("/members", "POST", body);
+  invite(workspace: string, body: InviteMember): Promise<WorkspaceInvitation> {
+    return this.request(
+      `/workspaces/${encodeURIComponent(workspace)}/invitations`,
+      "POST",
+      body,
+    );
+  }
+  invitationPreview(token: string): Promise<InvitationPreview> {
+    return this.request(`/invitations/${encodeURIComponent(token)}`);
+  }
+  acceptInvitation(body: AcceptInvitation): Promise<AcceptedInvitation> {
+    return this.request("/invitations/accept", "POST", body);
+  }
+  friends(): Promise<Friend[]> {
+    return this.request("/friends");
+  }
+  requestFriend(memberId: string): Promise<Friend[]> {
+    return this.request("/friends/request", "POST", { member_id: memberId });
+  }
+  acceptFriend(memberId: string): Promise<Friend[]> {
+    return this.request("/friends/accept", "POST", { member_id: memberId });
+  }
+  addFriend(
+    workspace: string,
+    memberId: string,
+    role: Role = "editor",
+  ): Promise<Receipt> {
+    return this.request(
+      `/workspaces/${encodeURIComponent(workspace)}/members`,
+      "POST",
+      { member_id: memberId, role },
+    );
   }
   backends(): Promise<BackendInfo[]> {
     return this.request("/backends");
@@ -188,7 +223,11 @@ export class DeltaClient {
 export function applyEvent(snapshot: Snapshot, event: Event): void {
   if (event.sequence <= snapshot.cursor) return;
   const c = event.change;
-  if (c.type === "order_restored") {
+  if (c.type === "member_added") {
+    snapshot.members ??= [];
+    if (!snapshot.members.some((member) => member.id === c.member.id))
+      snapshot.members.push(c.member);
+  } else if (c.type === "order_restored") {
     const positions = new Map(c.ids.map((id, index) => [id, index]));
     snapshot.entries.sort(
       (a, b) =>

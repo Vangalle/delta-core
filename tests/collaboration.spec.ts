@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 import { pasteMarkdown } from "./markdown.ts";
 const client = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function enter(page: Page, id: string, token = "e2e-owner") {
@@ -14,7 +15,10 @@ test("shared writing stays quiet, explicit agent mentions reply, and manual mode
   browser,
 }) => {
   const w = await client.createWorkspace("Shared native replies");
-  const invited = await client.invite({ name: "Writer Beta", role: "editor" });
+  const invited = await inviteMember(client, w.id, {
+    name: "Writer Beta",
+    role: "editor",
+  });
   const a = await browser.newContext(),
     b = await browser.newContext();
   const first = await a.newPage(),
@@ -38,6 +42,10 @@ test("shared writing stays quiet, explicit agent mentions reply, and manual mode
       "Human conversation",
     );
     expect((await client.snapshot(w.id)).entries).toHaveLength(1);
+    await expect(draft).toHaveText("");
+    await expect(
+      first.getByRole("button", { name: "Publish", exact: true }),
+    ).toBeEnabled();
     await draft.pressSequentially("@agent");
     await first
       .getByRole("button", { name: "Agent · ask Pi", exact: true })
@@ -68,7 +76,7 @@ test("quoted agent names do not produce a false execution-permission warning", a
   page,
 }) => {
   const w = await client.createWorkspace("Quoted mentions");
-  const invited = await client.invite({
+  const invited = await inviteMember(client, w.id, {
     name: "Quoted editor",
     role: "editor",
   });
@@ -113,7 +121,10 @@ test("different users have separate left-side identities and an Editor mention c
   browser,
 }) => {
   const w = await client.createWorkspace("Author identities");
-  const invited = await client.invite({ name: "Writer Gamma", role: "editor" });
+  const invited = await inviteMember(client, w.id, {
+    name: "Writer Gamma",
+    role: "editor",
+  });
   const a = await browser.newContext(),
     b = await browser.newContext();
   const first = await a.newPage(),

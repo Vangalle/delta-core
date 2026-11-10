@@ -1,5 +1,5 @@
 import { Editor } from "@tiptap/core";
-import { EditorState } from "@tiptap/pm/state";
+import { EditorState, Selection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import CodeBlock from "@tiptap/extension-code-block";
 import { Markdown } from "@tiptap/markdown";
@@ -159,7 +159,16 @@ export class RichEditor {
   }
   focus(): void {
     if (this.sourceMode) this.source.focus();
-    else this.editor.commands.focus("end");
+    else {
+      const view = this.editor.view;
+      const selection = Selection.atEnd(view.state.doc);
+      const transaction = view.state.tr;
+      if (!selection.eq(view.state.selection))
+        transaction.setSelection(selection);
+      view.dispatch(transaction);
+      view.focus();
+      view.dispatch(view.state.tr.scrollIntoView());
+    }
   }
   private updateEmpty(): void {
     this.editor.view.dom.classList.toggle("is-empty", this.editor.isEmpty);

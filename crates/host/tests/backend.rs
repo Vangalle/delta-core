@@ -42,7 +42,7 @@ async fn non_pi_backend_uses_the_same_kernel_and_receives_published_context() {
         .register_backend("alternative".into(), Arc::new(AlternativeBackend))
         .await;
     let owner = service.authenticate("owner").await.unwrap();
-    let workspace = service.workspaces().await.unwrap().remove(0);
+    let workspace = service.workspaces(&owner).await.unwrap().remove(0);
     service
         .command(
             &owner,
@@ -105,7 +105,7 @@ async fn non_pi_backend_uses_the_same_kernel_and_receives_published_context() {
         .unwrap();
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
-            let snapshot = service.snapshot(&workspace.id).await.unwrap();
+            let snapshot = service.snapshot(&owner,&workspace.id).await.unwrap();
             if let Content::Agent { status: SessionStatus::Idle, activities, .. } = &snapshot.entries[2].content {
                 assert!(activities.iter().any(|a| matches!(a, Activity::MessageEnd { text, .. } if text == "Alternative backend result")));
                 break;

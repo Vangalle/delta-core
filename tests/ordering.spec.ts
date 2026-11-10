@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 const owner = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function enter(page: Page, id: string) {
   await page.goto(`/?workspace=${id}`);
@@ -13,7 +14,7 @@ test("interleaved senders append in publication order and the normal draft stays
   page,
 }) => {
   const workspace = await owner.createWorkspace("Interleaved send order");
-  const invitation = await owner.invite({
+  const invitation = await inviteMember(owner, workspace.id, {
     name: "Order participant",
     role: "editor",
   });
@@ -71,6 +72,64 @@ test("the workspace owner can restore old ordering from the workspace actions me
   await expect(page.locator(".published-text")).toHaveText(["A1", "B1", "A2"]);
 });
 
+test("opening a private edit establishes its focus before the next animation frame", async ({
+  page,
+}) => {
+  const workspace = await owner.createWorkspace("Synchronous private focus");
+  await owner.command(workspace.id, {
+    type: "publish_text",
+    id: "original",
+    base_revision: 0,
+    text: "original",
+    after: null,
+  });
+  await enter(page, workspace.id);
+  const focused = await page
+    .getByRole("button", { name: "Edit text", exact: true })
+    .evaluate((element) => {
+      (element as HTMLButtonElement).click();
+      return document.activeElement?.getAttribute("aria-label");
+    });
+  expect(focused).toBe("Edit draft");
+  const edit = page.getByRole("textbox", { name: "Edit draft", exact: true });
+  await edit.fill("replacement only");
+  await expect(edit).toHaveText("replacement only");
+});
+
+test("focusing a long private edit scrolls its end cursor into the viewport", async ({
+  page,
+}) => {
+  const workspace = await owner.createWorkspace("Long private focus");
+  await owner.command(workspace.id, {
+    type: "publish_text",
+    id: "long",
+    base_revision: 0,
+    text: Array.from(
+      { length: 200 },
+      (_, index) => `Line ${index} of the long document.`,
+    ).join("\n\n"),
+    after: null,
+  });
+  await enter(page, workspace.id);
+  const metrics = await page
+    .getByRole("button", { name: "Edit text", exact: true })
+    .evaluate((element) => {
+      window.scrollTo(0, 0);
+      (element as HTMLButtonElement).click();
+      const selection = document.getSelection();
+      const rect = selection?.rangeCount
+        ? selection.getRangeAt(0).getBoundingClientRect()
+        : null;
+      return {
+        bottom: rect?.bottom ?? Infinity,
+        viewport: innerHeight,
+        focused: document.activeElement?.getAttribute("aria-label"),
+      };
+    });
+  expect(metrics.focused).toBe("Edit draft");
+  expect(metrics.bottom).toBeLessThanOrEqual(metrics.viewport);
+});
+
 test("restoring an existing order updates the live DOM without losing a focused private edit", async ({
   page,
 }) => {
@@ -92,8 +151,9 @@ test("restoring an existing order updates the live DOM without losing a focused 
   await expect(page.locator(".published-text")).toHaveText(["A1", "A2", "B1"]);
   await page.locator('[data-entry-id="b"] .edit-text').click();
   const edit = page.getByRole("textbox", { name: "Edit draft", exact: true });
+  await expect(edit).toBeFocused();
   await edit.fill("Still my private edit");
-  await edit.focus();
+  await expect(edit).toHaveText("Still my private edit");
   await owner.command(workspace.id, { type: "restore_chronological_order" });
   await expect
     .poll(() =>

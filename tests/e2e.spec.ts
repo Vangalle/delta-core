@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DeltaClient } from "@delta-core/client";
+import { inviteMember } from "./invitation.ts";
 const owner = new DeltaClient("http://127.0.0.1:47832", "e2e-owner");
 async function login(page: Page, workspace: string, token = "e2e-owner") {
   await page.goto(`/?workspace=${workspace}`);
@@ -14,7 +15,10 @@ test("private drafts stay private, explicit publications sync, and conflicts kee
   browser,
 }) => {
   const w = await owner.createWorkspace("Shared writing");
-  const invite = await owner.invite({ name: "Editor", role: "editor" });
+  const invite = await inviteMember(owner, w.id, {
+    name: "Editor",
+    role: "editor",
+  });
   const a = await browser.newContext();
   const b = await browser.newContext();
   const first = await a.newPage();
@@ -31,15 +35,23 @@ test("private drafts stay private, explicit publications sync, and conflicts kee
     await first.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(second.locator("#flow")).toContainText("Unpublished thought");
     await first.getByRole("button", { name: "Edit text", exact: true }).click();
-    await first
-      .getByRole("textbox", { name: "Edit draft", exact: true })
-      .fill("My private revision");
+    const firstEditor = first.getByRole("textbox", {
+      name: "Edit draft",
+      exact: true,
+    });
+    await expect(firstEditor).toBeFocused();
+    await firstEditor.fill("My private revision");
+    await expect(firstEditor).toHaveText("My private revision");
     await second
       .getByRole("button", { name: "Edit text", exact: true })
       .click();
-    await second
-      .getByRole("textbox", { name: "Edit draft", exact: true })
-      .fill("Other published revision");
+    const secondEditor = second.getByRole("textbox", {
+      name: "Edit draft",
+      exact: true,
+    });
+    await expect(secondEditor).toBeFocused();
+    await secondEditor.fill("Other published revision");
+    await expect(secondEditor).toHaveText("Other published revision");
     await second
       .getByRole("button", { name: "Publish edit", exact: true })
       .click();
@@ -65,7 +77,10 @@ test("inline terminal is real, persistent, shared, and controlled only by its cr
   browser,
 }) => {
   const w = await owner.createWorkspace("Execution");
-  const invite = await owner.invite({ name: "Observer", role: "executor" });
+  const invite = await inviteMember(owner, w.id, {
+    name: "Observer",
+    role: "executor",
+  });
   const a = await browser.newContext();
   const b = await browser.newContext();
   const first = await a.newPage();

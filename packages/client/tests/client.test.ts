@@ -53,6 +53,27 @@ test("collaboration events project into legacy snapshots and repeated joins do n
   });
 });
 
+test("workspace member events update only the scoped roster without granting local execution", () => {
+  const snapshot: Snapshot = {
+    workspace: { id: "w", title: "W" },
+    cursor: 1,
+    entries: [],
+    members: [],
+    access: { role: "editor", can_execute: false },
+  };
+  applyEvent(snapshot, {
+    sequence: 2,
+    change: {
+      type: "member_added",
+      member: { id: "peer", name: "Peer", role: "executor" },
+    },
+  });
+  assert.deepEqual(snapshot.members, [
+    { id: "peer", name: "Peer", role: "executor" },
+  ]);
+  assert.equal(snapshot.access?.can_execute, false);
+});
+
 test("chronology restoration moves existing entries without replacing their contents", () => {
   const snapshot: Snapshot = {
     workspace: { id: "w", title: "Work" },
